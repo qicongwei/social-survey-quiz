@@ -436,7 +436,21 @@
 
     const box = document.createElement('div');
     box.className = 'answer-box';
-    box.innerHTML = '<span class="lbl">参考答案</span>' + esc(q.answerText || '（本题暂无参考答案）');
+    const head = document.createElement('div');
+    head.className = 'ab-head';
+    head.innerHTML = '<span class="lbl">参考答案</span>';
+    const spk = document.createElement('button');
+    spk.className = 'ghost-btn small-btn';
+    spk.textContent = '朗读';
+    spk.addEventListener('click', () => {
+      if (window.__speak) window.__speak(q.stem + '。' + (q.answerText || ''));
+    });
+    head.appendChild(spk);
+    const body = document.createElement('div');
+    body.className = 'ab-body';
+    body.textContent = q.answerText || '（本题暂无参考答案）';
+    box.appendChild(head);
+    box.appendChild(body);
     qs('#answerArea').appendChild(box);
 
     const old = qs('#answerArea [data-act="show-answer"]');
@@ -676,6 +690,24 @@
       chart.appendChild(col);
     });
 
+    // 学习热力图（最近 12 周）
+    const heat = qs('#heatGrid');
+    if (heat) {
+      const cells = [];
+      let activeDays = 0, totalActs = 0;
+      for (let i = 83; i >= 0; i--) {
+        const d = Scheduler.addDays(today, -i);
+        const day = st.daily[d] || {};
+        const n = (day.answered || 0) + Math.round((day.typed || 0) / 60) + (day.exams || 0) * 5;
+        if (n > 0) { activeDays++; totalActs += n; }
+        const lv = n >= 31 ? 'l4' : n >= 16 ? 'l3' : n >= 6 ? 'l2' : n >= 1 ? 'l1' : '';
+        cells.push('<i class="' + lv + '" title="' + d + '：' + n + (n ? ' 次练习' : '') + '"></i>');
+      }
+      heat.innerHTML = cells.join('');
+      const hs = qs('#heatSummary');
+      if (hs) hs.textContent = '近 12 周练习 ' + activeDays + ' 天 · 累计 ' + totalActs + ' 次';
+    }
+
     // 薄弱题
     const weak = Bank.all
       .map(q => ({ q, s: Store.peek(q.id) }))
@@ -774,7 +806,7 @@
   function switchView(v) {
     App.view = v;
     qsa('#tabs .tab').forEach(b => b.classList.toggle('is-active', b.dataset.view === v));
-    ['practice', 'browse', 'stats', 'settings'].forEach(k => {
+    ['practice', 'typing', 'exam', 'browse', 'stats', 'settings'].forEach(k => {
       qs('#view-' + k).hidden = k !== v;
     });
     if (v === 'browse') renderBrowse();
@@ -908,10 +940,13 @@
     applySettingsToUI();
     updateTopStats();
     startSession('all', {});
+    if (window.Typing) Typing.init();
+    if (window.Exam) Exam.init();
   }
 
   document.addEventListener('DOMContentLoaded', init);
 
   // 调试/自动化入口（不影响正常使用）
-  window.__SSQ__ = { Bank, App, renderQuestion, startSession, nextQuestion, checkBlank };
+  window.__SSQ__ = { Bank, App, renderQuestion, startSession, nextQuestion, checkBlank, toast };
+  window.__toast = toast;
 })();

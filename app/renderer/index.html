@@ -21,6 +21,8 @@
 
     <nav class="tabs" id="tabs">
       <button class="tab is-active" data-view="practice">练习</button>
+      <button class="tab" data-view="typing">打字</button>
+      <button class="tab" data-view="exam">模考</button>
       <button class="tab" data-view="browse">题库</button>
       <button class="tab" data-view="stats">统计</button>
       <button class="tab" data-view="settings">设置</button>
@@ -89,6 +91,130 @@
       </div>
     </section>
 
+    <!-- ============ 打字训练 ============ -->
+    <section class="view" id="view-typing" hidden>
+      <div class="filters">
+        <div class="chips" id="typingChips">
+          <button class="chip is-on" data-scope="subj">主观题<b>63</b></button>
+          <button class="chip" data-scope="short">名解简答<b>51</b></button>
+          <button class="chip" data-scope="prac">实操<b>12</b></button>
+        </div>
+        <div class="typing-modes" id="typingModes">
+          <button class="ghost-btn is-on" data-mode="see">对照打</button>
+          <button class="ghost-btn" data-mode="blind">默打</button>
+        </div>
+      </div>
+
+      <div class="typing-options">
+        <label class="check"><input type="checkbox" id="typingSkipPunc" checked> 忽略标点差异</label>
+        <span class="sep"></span>
+        <button class="ghost-btn small-btn" id="typingSpeak">朗读答案</button>
+      </div>
+
+      <div class="card typing-card" id="typingCard">
+        <div class="qhead">
+          <div class="qhead-left">
+            <span class="badge" id="tqType">名解简答</span>
+            <span class="qno" id="tqNo">第 1 题</span>
+            <span class="qchapter" id="tqChapter"></span>
+          </div>
+          <div class="qhead-right">
+            <span class="tq-len" id="tqLen">0 字</span>
+            <span class="tq-best" id="tqBest"></span>
+            <button class="icon-btn" id="tqHide" title="遮住 / 显示参考">👁</button>
+          </div>
+        </div>
+
+        <div class="stem tq-stem" id="tqStem"></div>
+
+        <div class="type-ref-wrap"><div class="type-ref" id="typeRef"></div></div>
+
+        <textarea id="typeInput" class="type-input" spellcheck="false"
+          placeholder="在这里开始打字，输入的每个字会实时与上方参考答案比对…"></textarea>
+
+        <div class="type-stats">
+          <div><span>进度</span><b id="stProg">0%</b></div>
+          <div><span>正确率</span><b id="stAcc">—</b></div>
+          <div><span>速度</span><b id="stCpm">0</b><em>字/分</em></div>
+          <div><span>错误</span><b id="stErr">0</b></div>
+          <div><span>用时</span><b id="stTime">0:00</b></div>
+        </div>
+
+        <div class="type-result" id="typeResult" hidden></div>
+      </div>
+
+      <div class="card-actions">
+        <div class="hint" id="typeHint">开始输入即计时 · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 提交</div>
+        <div class="row-btns">
+          <button class="ghost-btn" id="typeRestart">重打</button>
+          <button class="primary-btn" id="typeSubmit">完成训练</button>
+          <button class="primary-btn" id="typeNext" hidden>下一题 <kbd>↵</kbd></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 模拟考试 ============ -->
+    <section class="view" id="view-exam" hidden>
+
+      <div id="examStart">
+        <div class="panel">
+          <h3>新建一套模拟卷</h3>
+          <p class="muted" style="font-size:13px;margin-bottom:16px">
+            从单选、判断、填空中随机抽取，交卷后自动判分并列出错题。主观题请到「打字」页训练。
+          </p>
+          <div class="exam-config">
+            <label class="cfg-item">
+              <span>题量</span>
+              <select id="examCount">
+                <option value="20">20 题（约 15 分钟）</option>
+                <option value="30" selected>30 题（约 25 分钟）</option>
+                <option value="50">50 题（约 40 分钟）</option>
+              </select>
+            </label>
+            <label class="cfg-item">
+              <span>时限</span>
+              <select id="examMinutes">
+                <option value="15">15 分钟</option>
+                <option value="30" selected>30 分钟</option>
+                <option value="45">45 分钟</option>
+              </select>
+            </label>
+            <button class="primary-btn" id="examBegin">开始考试</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>最近成绩</h3>
+          <div id="examHistory"></div>
+        </div>
+      </div>
+
+      <div id="examRun" hidden>
+        <div class="exam-bar">
+          <div class="eb-left">
+            <span class="eb-clock" id="examClock">30:00</span>
+            <span class="eb-done">已答 <b id="examDone">0 / 0</b></span>
+          </div>
+          <div class="eb-right">
+            <button class="ghost-btn" id="examBack">放弃</button>
+            <button class="primary-btn" id="examSubmit">交卷</button>
+          </div>
+        </div>
+        <div id="examList" class="exam-list"></div>
+        <div class="exam-foot">
+          <button class="primary-btn big" id="examSubmit2" style="display:none"></button>
+        </div>
+      </div>
+
+      <div id="examResult" hidden>
+        <div id="examResultBody"></div>
+        <div class="row-btns" style="margin-top:22px">
+          <button class="ghost-btn" id="examHome">返回</button>
+          <button class="primary-btn" id="examAgain">再做一套</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ 题库 ============ -->
     <section class="view" id="view-browse" hidden>
       <div class="browse-bar">
@@ -124,6 +250,21 @@
       <div class="panel">
         <h3>未来 7 天到期量</h3>
         <div class="chart" id="dueChart"></div>
+      </div>
+
+      <div class="panel">
+        <h3>学习热力图 <small>（最近 12 周，颜色越深当天练得越多）</small></h3>
+        <div class="heat-wrap"><div class="heat" id="heatGrid"></div></div>
+        <div class="heat-legend">
+          <span>少</span>
+          <i style="background:#eef1f6"></i>
+          <i style="background:#d6e4fb"></i>
+          <i style="background:#a9c6f4"></i>
+          <i style="background:#6f9ceb"></i>
+          <i style="background:#2b5cd9"></i>
+          <span>多</span>
+          <span class="heat-sum" id="heatSummary"></span>
+        </div>
       </div>
 
       <div class="panel">
@@ -192,6 +333,8 @@
 <script src="data/questions.js"></script>
 <script src="js/store.js"></script>
 <script src="js/scheduler.js"></script>
+<script src="js/typing.js"></script>
+<script src="js/exam.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

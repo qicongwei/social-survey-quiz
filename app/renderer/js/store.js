@@ -10,8 +10,10 @@ const Store = (() => {
       version: 1,
       questions: {},
       daily: {},
+      typing: {},
+      exams: [],
       meta: { streakLast: '', streakDays: 0, totalAnswered: 0, totalRight: 0, createdAt: new Date().toISOString() },
-      settings: { newPerDay: 30, reviewPerDay: 80, requeue: true }
+      settings: { newPerDay: 30, reviewPerDay: 80, requeue: true, typingMode: 'see', skipPunc: true }
     };
   }
 
@@ -22,6 +24,8 @@ const Store = (() => {
       version: 1,
       questions: raw.questions && typeof raw.questions === 'object' ? raw.questions : {},
       daily: raw.daily && typeof raw.daily === 'object' ? raw.daily : {},
+      typing: raw.typing && typeof raw.typing === 'object' ? raw.typing : {},
+      exams: Array.isArray(raw.exams) ? raw.exams.slice(-50) : [],
       meta: Object.assign(d.meta, raw.meta || {}),
       settings: Object.assign(d.settings, raw.settings || {})
     };

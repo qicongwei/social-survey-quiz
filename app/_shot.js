@@ -150,6 +150,92 @@ app.whenReady().then(async () => {
   await sleep(400);
   await shot('09-settings');
 
+  // ---------- 打字训练 ----------
+  await win.webContents.executeJavaScript(`document.querySelector('[data-view="typing"]').click(); true`);
+  await sleep(500);
+  await shot('10-typing');
+
+  const typingCheck = await win.webContents.executeJavaScript(`
+    (function(){
+      const ta = document.querySelector('#typeInput');
+      const refBox = document.querySelector('#typeRef');
+      const total = refBox.querySelectorAll('span').length;
+      const q = window.__SSQ__.Bank.all.find(function(x){ return x.type === 'short'; });
+      const text = refBox.textContent.slice(0, 40);
+      // 输入前 20 字，其中第 5 字故意打错
+      const typed = text.slice(0, 20);
+      ta.value = typed.slice(0, 4) + '错' + typed.slice(5);
+      ta.dispatchEvent(new Event('input'));
+      const ok = refBox.querySelectorAll('span.ok').length;
+      const bad = refBox.querySelectorAll('span.bad').length;
+      return { spans: total, ok: ok, bad: bad, prog: document.querySelector('#stProg').textContent,
+               acc: document.querySelector('#stAcc').textContent, firstId: q ? q.id : null };
+    })()
+  `);
+  console.log('TYPING_CHECK:' + JSON.stringify(typingCheck));
+  await shot('11-typing-typed');
+
+  // 修正后打完全文，看能否自动完成并出分
+  const finishCheck = await win.webContents.executeJavaScript(`
+    (function(){
+      const ta = document.querySelector('#typeInput');
+      const ref = document.querySelector('#typeRef').textContent;
+      ta.value = ref;
+      ta.dispatchEvent(new Event('input'));
+      return { prog: document.querySelector('#stProg').textContent, acc: document.querySelector('#stAcc').textContent };
+    })()
+  `);
+  await sleep(700);
+  const resultShown = await win.webContents.executeJavaScript(`
+    (function(){
+      const r = document.querySelector('#typeResult');
+      return { hidden: r.hidden, text: r.textContent.replace(/\\s+/g,' ').slice(0, 80),
+               best: (Store.state.typing && Object.keys(Store.state.typing).length) || 0 };
+    })()
+  `);
+  console.log('FINISH_CHECK:' + JSON.stringify(finishCheck) + ' RESULT:' + JSON.stringify(resultShown));
+  await shot('12-typing-result');
+
+  // ---------- 模拟考试 ----------
+  await win.webContents.executeJavaScript(`document.querySelector('[data-view="exam"]').click(); true`);
+  await sleep(400);
+  await shot('13-exam-start');
+
+  const examStart = await win.webContents.executeJavaScript(`
+    (function(){
+      document.querySelector('#examBegin').click();
+      const cards = document.querySelectorAll('.exam-q').length;
+      return { cards: cards, clock: document.querySelector('#examClock').textContent };
+    })()
+  `);
+  console.log('EXAM_START:' + JSON.stringify(examStart));
+  await sleep(400);
+  await shot('14-exam-run');
+
+  const examSubmit = await win.webContents.executeJavaScript(`
+    (function(){
+      // 全部选 A / 判断选√ / 填空随便填，然后交卷
+      document.querySelectorAll('.opt[data-k="A"]').forEach(function(b){ b.click(); });
+      document.querySelectorAll('.judge-btn[data-v="√"]').forEach(function(b){ b.click(); });
+      document.querySelectorAll('.exam-blanks input').forEach(function(i){ i.value = '测试'; i.dispatchEvent(new Event('input',{bubbles:true})); });
+      const done = document.querySelector('#examDone').textContent;
+      window.confirm = function(){ return true; };
+      document.querySelector('#examSubmit').click();
+      return { answered: done, hasResult: !document.querySelector('#examResult').hidden,
+               score: (document.querySelector('.rh-score')||{}).textContent };
+    })()
+  `);
+  console.log('EXAM_SUBMIT:' + JSON.stringify(examSubmit));
+  await sleep(400);
+  await shot('15-exam-result');
+
+  // ---------- 统计（含热力图） ----------
+  await win.webContents.executeJavaScript(`document.querySelector('[data-view="stats"]').click(); true`);
+  await sleep(500);
+  const heat = await win.webContents.executeJavaScript(`document.querySelectorAll('#heatGrid i').length`);
+  console.log('HEAT_CELLS:' + heat);
+  await shot('16-stats');
+
   console.log('CONSOLE_ERRORS:' + JSON.stringify(errors));
   app.quit();
 }).catch(e => { console.error('FAIL', e); app.quit(); });

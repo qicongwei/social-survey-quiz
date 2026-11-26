@@ -6,7 +6,7 @@ Electron 33 + 原生 HTML/CSS/JS，无前端框架、无构建步骤。
 
 ## 下载
 
-Windows 64 位：到 [Releases](https://github.com/qicongwei/social-survey-quiz/releases/latest) 下载 `社会调查背诵题库-*-win32-x64.zip`，解压后双击文件夹里的 `社会调查背诵题库.exe`。
+Windows 64 位：到 [Releases](https://github.com/qicongwei/social-survey-quiz/releases/latest) 下载 `social-survey-quiz-v*-win32-x64.zip`（约 110 MB），解压后双击文件夹里的 `社会调查背诵题库.exe`。
 
 - **整个文件夹一起用**，exe 依赖同目录的 dll 与 `resources/`，单独复制 exe 到别处跑不起来
 - 免安装、不联网，进度存在 `%APPDATA%\社会调查背诵题库\progress.json`
@@ -147,4 +147,5 @@ node_modules\.bin\electron-packager . 社会调查背诵题库 ^
 ## 许可
 
 代码与构建脚本：MIT，见 [LICENSE](LICENSE)。
-题库内容不在 MIT 授权范围内，仅限个人学习使用。
+
+题库内容不在 MIT 授权范围内，仅限个人学习使用，详见 [NOTICE.md](NOTICE.md)。

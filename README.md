@@ -121,6 +121,15 @@ node_modules\.bin\electron-packager . 社会调查背诵题库 ^
 
 打包产物约 269 MB，须整目录分发（exe 依赖同目录 dll 与 resources）。
 
+发布用 zip：
+
+```bash
+python _tools\make_zip.py
+# → dist/social-survey-quiz-v<版本>-win32-x64.zip（约 110 MB）
+```
+
+> 附件名保持 ASCII：GitHub Release 会静默剥离 `?name=` 里的非 ASCII 字符。
+
 发行版自检：
 
 ```bash

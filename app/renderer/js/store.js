@@ -14,7 +14,10 @@ const Store = (() => {
       typingLog: [],
       exams: [],
       meta: { streakLast: '', streakDays: 0, totalAnswered: 0, totalRight: 0, createdAt: new Date().toISOString() },
-      settings: { newPerDay: 30, reviewPerDay: 80, requeue: true, typingMode: 'see', skipPunc: true }
+      settings: {
+        newPerDay: 30, reviewPerDay: 80, requeue: true, typingMode: 'see', skipPunc: true,
+        theme: 'light', dailyGoal: 50
+      }
     };
   }
 
@@ -67,7 +70,7 @@ const Store = (() => {
 
   function q(id) {
     if (!state.questions[id]) {
-      state.questions[id] = { reps: 0, interval: 0, ease: 2.5, due: '', last: '', right: 0, wrong: 0, lapses: 0, star: false };
+      state.questions[id] = { reps: 0, interval: 0, ease: 2.5, due: '', last: '', right: 0, wrong: 0, lapses: 0, star: false, note: '' };
     }
     return state.questions[id];
   }

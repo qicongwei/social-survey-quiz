@@ -245,6 +245,119 @@ app.whenReady().then(async () => {
   await sleep(300);
   await shot('18-seg');
 
+  // ---------- 主题切换 ----------
+  const themeChk = await win.webContents.executeJavaScript(`
+    (function(){
+      const before = document.documentElement.dataset.theme;
+      document.querySelector('#btnTheme').click();
+      const t1 = document.documentElement.dataset.theme;
+      const bg1 = getComputedStyle(document.body).backgroundColor;
+      const ink1 = getComputedStyle(document.querySelector('#qStem')).color;
+      return { before: before, after: t1, bg: bg1, ink: ink1 };
+    })()
+  `);
+  console.log('THEME:' + JSON.stringify(themeChk));
+  await sleep(400);
+  await shot('19-dark');
+
+  // 深色下的打字页与统计页
+  await win.webContents.executeJavaScript(`document.querySelector('[data-view="typing"]').click(); true`);
+  await sleep(450);
+  await shot('24-dark-typing');
+  await win.webContents.executeJavaScript(`document.querySelector('[data-view="stats"]').click(); true`);
+  await sleep(550);
+  await shot('25-dark-stats');
+  await win.webContents.executeJavaScript(`document.querySelector('[data-view="practice"]').click(); true`);
+  await sleep(300);
+
+  // 设置页主题三档
+  const themeSet = await win.webContents.executeJavaScript(`
+    (function(){
+      document.querySelector('[data-view="settings"]').click();
+      document.querySelector('#themePick [data-theme="auto"]').click();
+      const mode = document.documentElement.dataset.themeMode;
+      const eff = document.documentElement.dataset.theme;
+      const on = document.querySelector('#themePick .is-on');
+      return { mode: mode, eff: eff, active: on ? on.dataset.theme : null };
+    })()
+  `);
+  console.log('THEME_SET:' + JSON.stringify(themeSet));
+
+  // ---------- 笔记 + 收藏练习 ----------
+  const noteChk = await win.webContents.executeJavaScript(`
+    (function(){
+      document.querySelector('[data-view="practice"]').click();
+      document.querySelector('#typeChips [data-type="single"]').click();
+      const id = window.__SSQ__.App.current.id;
+      document.querySelector('#btnNote').click();
+      const box = document.querySelector('#noteBox');
+      const visible = !box.hidden;
+      const ta = document.querySelector('#noteInput');
+      ta.value = '口诀：先定位调查对象，再定抽样框';
+      document.querySelector('#noteSave').click();
+      document.querySelector('#btnNote').click();
+      return { visible: visible, saved: (Store.peek(id) || {}).note,
+               btnOn: document.querySelector('#btnNote').classList.contains('on'), id: id };
+    })()
+  `);
+  console.log('NOTE:' + JSON.stringify(noteChk));
+  await win.webContents.executeJavaScript(`
+    (function(){
+      document.querySelector('#btnNote').click();
+      return true;
+    })()
+  `);
+  await sleep(300);
+  await shot('20-note');
+
+  const starChk = await win.webContents.executeJavaScript(`
+    (function(){
+      const id = window.__SSQ__.App.current.id;
+      const q = Store.peek(id);
+      if (!q.star) document.querySelector('#btnStar').click();
+      document.querySelector('#btnStarMode').click();
+      const sess = window.__SSQ__.App.session;
+      return { on: window.__SSQ__.App.starMode, queue: sess.queue.length,
+               starTotal: Object.keys(Store.state.questions).filter(function(k){ return Store.state.questions[k].star; }).length,
+               cur: (window.__SSQ__.App.current || {}).id };
+    })()
+  `);
+  console.log('STAR:' + JSON.stringify(starChk));
+  await sleep(300);
+  await shot('21-star-mode');
+
+  // 题库里搜索笔记关键词
+  const noteSearch = await win.webContents.executeJavaScript(`
+    (function(){
+      document.querySelector('[data-view="browse"]').click();
+      const inp = document.querySelector('#searchInput');
+      inp.value = '抽样框';
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      const meta = document.querySelector('#browseMeta').textContent;
+      const first = document.querySelector('.item-note');
+      return { meta: meta, hasNote: !!first, n: document.querySelectorAll('.item').length };
+    })()
+  `);
+  console.log('NOTE_SEARCH:' + JSON.stringify(noteSearch));
+  await sleep(300);
+  await win.webContents.executeJavaScript(`(function(){ const h=document.querySelector('.item-head'); if(h) h.click(); return true; })()`);
+  await sleep(300);
+  await shot('22-browse-note');
+
+  // 题库内「练这题」
+  const oneChk = await win.webContents.executeJavaScript(`
+    (function(){
+      const b = document.querySelector('.item [data-practice]');
+      const id = b ? b.dataset.practice : null;
+      if (b) b.click();
+      return { want: id, view: window.__SSQ__.App.view, cur: (window.__SSQ__.App.current || {}).id,
+               queue: (window.__SSQ__.App.session || {}).queue };
+    })()
+  `);
+  console.log('PRACTICE_ONE:' + JSON.stringify(oneChk));
+  await sleep(350);
+  await shot('26-practice-one');
+
   // ---------- 模拟考试 ----------
   await win.webContents.executeJavaScript(`document.querySelector('[data-view="exam"]').click(); true`);
   await sleep(400);
@@ -260,6 +373,26 @@ app.whenReady().then(async () => {
   console.log('EXAM_START:' + JSON.stringify(examStart));
   await sleep(400);
   await shot('14-exam-run');
+
+  // 答题卡：数量、标记、跳转
+  await sleep(300);
+  await shot('23-exam-sheet');
+  const sheetChk = await win.webContents.executeJavaScript(`
+    (function(){
+      const cells = document.querySelectorAll('.es-cell').length;
+      const stat0 = document.querySelector('#esStat').textContent;
+      const fb = document.querySelector('.es-flag[data-i="2"]');
+      if (fb) fb.click();
+      const cell = document.querySelector('.es-cell[data-i="2"]');
+      if (cell) cell.click();
+      const hit = document.querySelector('.exam-q[data-i="2"]').classList.contains('hit');
+      return { cells: cells, stat: stat0, flagged: cell ? cell.classList.contains('flag') : false,
+               hit: hit, statNow: document.querySelector('#esStat').textContent };
+    })()
+  `);
+  console.log('SHEET:' + JSON.stringify(sheetChk));
+  await sleep(500);
+  await shot('23b-exam-jump');
 
   const examSubmit = await win.webContents.executeJavaScript(`
     (function(){

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
 <title>社会调查 · 背诵题库</title>
+<script src="js/theme-boot.js"></script>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -29,9 +30,10 @@
     </nav>
 
     <div class="topstats">
-      <div class="ts"><span>今日</span><b id="tsToday">0</b></div>
+      <div class="ts"><span>今日</span><b id="tsToday">0</b><em id="tsGoal">/ 50</em></div>
       <div class="ts"><span>待复习</span><b id="tsDue">0</b></div>
       <div class="ts"><span>连续</span><b id="tsStreak">0</b><em>天</em></div>
+      <button class="icon-btn theme-btn" id="btnTheme" title="切换外观（浅色 / 深色）">◐</button>
     </div>
   </header>
 
@@ -49,6 +51,7 @@
           <button class="chip" data-type="prac">实操<b>12</b></button>
         </div>
         <select id="chapterSelect" class="chapter-select" hidden title="按章节练习"></select>
+        <button class="ghost-btn" id="btnStarMode" title="只练收藏的题">☆ 收藏</button>
         <button class="ghost-btn" id="btnWrongMode" title="只练做错过的题">错题强化</button>
       </div>
 
@@ -74,6 +77,7 @@
             </div>
             <div class="qhead-right">
               <span class="streak-dot" id="qState" title="掌握状态"></span>
+              <button class="icon-btn" id="btnNote" title="记笔记（N）">✎</button>
               <button class="icon-btn" id="btnStar" title="收藏（S）">☆</button>
             </div>
           </div>
@@ -81,6 +85,19 @@
           <div class="stem" id="qStem"></div>
 
           <div class="answer-area" id="answerArea"></div>
+
+          <div class="note-box" id="noteBox" hidden>
+            <div class="nb-head">
+              <span>我的笔记 <small>只对自己可见，随进度一起保存</small></span>
+              <button class="icon-btn" id="noteClose" title="收起">✕</button>
+            </div>
+            <textarea id="noteInput" placeholder="写下记忆口诀、易错点、老师强调的地方…"></textarea>
+            <div class="nb-foot">
+              <span class="nb-tip" id="noteTip">Ctrl + Enter 保存</span>
+              <button class="ghost-btn small-btn" id="noteClear">清除</button>
+              <button class="primary-btn small-btn" id="noteSave">保存</button>
+            </div>
+          </div>
 
           <div class="feedback" id="feedback" hidden></div>
         </div>
@@ -201,6 +218,13 @@
             <button class="primary-btn" id="examSubmit">交卷</button>
           </div>
         </div>
+        <div class="exam-sheet" id="examSheet">
+          <div class="es-head">
+            <span>答题卡 <small id="esStat">已答 0 / 0</small></span>
+            <button class="ghost-btn small-btn" id="esToggle">收起</button>
+          </div>
+          <div class="es-grid" id="esGrid"></div>
+        </div>
         <div id="examList" class="exam-list"></div>
         <div class="exam-foot">
           <button class="primary-btn big" id="examSubmit2" style="display:none"></button>
@@ -229,6 +253,7 @@
           <button class="chip" data-type="prac">实操</button>
         </div>
         <label class="check"><input type="checkbox" id="onlyWrong"> 只看错题</label>
+        <label class="check"><input type="checkbox" id="onlyStar"> 只看收藏</label>
       </div>
       <div class="browse-meta" id="browseMeta">共 394 题</div>
       <div class="list" id="browseList"></div>
@@ -263,11 +288,7 @@
         <div class="heat-wrap"><div class="heat" id="heatGrid"></div></div>
         <div class="heat-legend">
           <span>少</span>
-          <i style="background:#eef1f6"></i>
-          <i style="background:#d6e4fb"></i>
-          <i style="background:#a9c6f4"></i>
-          <i style="background:#6f9ceb"></i>
-          <i style="background:#2b5cd9"></i>
+          <i class="h0"></i><i class="h1"></i><i class="h2"></i><i class="h3"></i><i class="h4"></i>
           <span>多</span>
           <span class="heat-sum" id="heatSummary"></span>
         </div>
@@ -281,6 +302,22 @@
 
     <!-- ============ 设置 ============ -->
     <section class="view" id="view-settings" hidden>
+      <div class="panel">
+        <h3>外观与目标</h3>
+        <div class="setting-row">
+          <div><label>界面主题</label><small>深色适合夜间背诵，可跟随系统自动切换</small></div>
+          <div class="theme-pick" id="themePick">
+            <button class="ghost-btn small-btn" data-theme="light">浅色</button>
+            <button class="ghost-btn small-btn" data-theme="dark">深色</button>
+            <button class="ghost-btn small-btn" data-theme="auto">跟随系统</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div><label>每日目标</label><small>当天答题数达到此值即视为完成当日目标</small></div>
+          <input type="number" id="setGoal" min="10" max="400" step="10">
+        </div>
+      </div>
+
       <div class="panel">
         <h3>每日计划</h3>
         <div class="setting-row">
@@ -326,6 +363,8 @@
           <div><kbd>Enter</kbd><span>下一题 / 提交</span></div>
           <div><kbd>Space</kbd><span>显示答案</span></div>
           <div><kbd>S</kbd><span>收藏本题</span></div>
+          <div><kbd>N</kbd><span>记笔记</span></div>
+          <div><kbd>Esc</kbd><span>收起笔记</span></div>
         </div>
       </div>
 

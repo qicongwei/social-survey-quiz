@@ -19,11 +19,13 @@
     filter: 'all',
     chapter: '',
     wrongMode: false,
+    starMode: false,
     browseType: 'all',
     session: null,
     current: null,
     answered: false,
-    requeue: {}
+    requeue: {},
+    goalHit: ''
   };
 
   /* ---------------- 工具 ---------------- */
@@ -128,6 +130,21 @@
       return arr.map(q => q.id);
     }
 
+    if (opts.starOnly) {
+      const arr = pool.filter(q => {
+        const s = Store.peek(q.id);
+        return s && s.star;
+      });
+      // 收藏夹内按到期优先，未到期按题号
+      arr.sort((a, b) => {
+        const sa = Store.peek(a.id), sb = Store.peek(b.id);
+        const da = Scheduler.isDue(sa, today) ? 0 : 1;
+        const db = Scheduler.isDue(sb, today) ? 0 : 1;
+        return da - db || a.no - b.no;
+      });
+      return arr.map(q => q.id);
+    }
+
     const due = [], fresh = [];
     for (const q of pool) {
       const s = Store.peek(q.id);
@@ -153,12 +170,14 @@
   function startSession(type, opts) {
     App.filter = type;
     App.wrongMode = !!(opts && opts.wrongOnly);
+    App.starMode = !!(opts && opts.starOnly);
     App.chapter = (opts && opts.chapter) || '';
     const ids = buildQueue(type, opts || {});
     App.session = { queue: ids, pos: 0, initial: ids.length };
     App.requeue = {};
     qsa('#typeChips .chip').forEach(c => c.classList.toggle('is-on', c.dataset.type === type));
     qs('#btnWrongMode').classList.toggle('on', App.wrongMode);
+    qs('#btnStarMode').classList.toggle('on', App.starMode);
     updateChapterUI();
     updateProgressLine();
     nextQuestion();
@@ -199,10 +218,18 @@
     qs('#hint').hidden = true;
     const pool = Bank.all.filter(q => App.filter === 'all' || q.type === App.filter);
     const allFresh = pool.every(q => !Scheduler.isLearned(Store.peek(q.id)));
-    qs('#emptyState').querySelector('h3').textContent = allFresh ? '这个题型已经练完一轮' : '今天的任务已完成';
-    qs('#emptyState').querySelector('p').textContent = allFresh
-      ? '该范围没有剩余新题，可切换题型或继续巩固错题。'
-      : '没有到期需要复习的题目了。可以切换题型，或额外加练 10 道。';
+    const h3 = qs('#emptyState').querySelector('h3');
+    const p = qs('#emptyState').querySelector('p');
+    if (App.starMode) {
+      h3.textContent = '收藏夹里没有题目';
+      p.textContent = '练习或题库页点击题目右上角的 ☆ 收藏，之后就能在这里单独复习。';
+    } else {
+      h3.textContent = allFresh ? '这个题型已经练完一轮' : '今天的任务已完成';
+      p.textContent = allFresh
+        ? '该范围没有剩余新题，可切换题型或继续巩固错题。'
+        : '没有到期需要复习的题目了。可以切换题型，或额外加练 10 道。';
+    }
+    qs('#btnExtra').hidden = App.starMode;
     updateProgressLine();
   }
 
@@ -236,6 +263,13 @@
     const on = !!(s && s.star);
     star.classList.toggle('on', on);
     star.textContent = on ? '★' : '☆';
+
+    // 笔记
+    const hasNote = !!(s && s.note && s.note.trim());
+    const nb = qs('#btnNote');
+    nb.classList.toggle('on', hasNote);
+    nb.title = hasNote ? '编辑笔记（N）' : '记笔记（N）';
+    qs('#noteBox').hidden = true;
 
     renderStem(q);
     renderAnswerArea(q);
@@ -632,19 +666,87 @@
     m.streakLast = today;
   }
 
+  /* ---------------- 笔记 ---------------- */
+  function openNote() {
+    if (!App.current) return;
+    const s = Store.peek(App.current.id);
+    qs('#noteInput').value = (s && s.note) || '';
+    qs('#noteTip').textContent = 'Ctrl + Enter 保存';
+    qs('#noteBox').hidden = false;
+    setTimeout(() => qs('#noteInput').focus(), 30);
+  }
+
+  function closeNote() {
+    qs('#noteBox').hidden = true;
+  }
+
+  function saveNote() {
+    if (!App.current) return;
+    const v = qs('#noteInput').value.trim();
+    const s = Store.q(App.current.id);
+    s.note = v;
+    Store.save();
+    qs('#btnNote').classList.toggle('on', !!v);
+    qs('#noteTip').textContent = v ? '已保存' : '已清空';
+    toast(v ? '笔记已保存' : '笔记已清除');
+  }
+
+  /* ---------------- 主题 ---------------- */
+  function resolveTheme(mode) {
+    if (mode === 'auto') {
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return mode === 'dark' ? 'dark' : 'light';
+  }
+
+  function applyTheme(mode, persist) {
+    const m = mode === 'dark' || mode === 'auto' ? mode : 'light';
+    const eff = resolveTheme(m);
+    document.documentElement.dataset.theme = eff;
+    document.documentElement.dataset.themeMode = m;
+    if (persist && Store.state) {
+      Store.state.settings.theme = m;
+      Store.save(true);
+    }
+    // 供下次启动的首帧使用（进度文件异步读取，来不及）
+    try { localStorage.setItem('ssq-theme', m); } catch (e) { /* 忽略 */ }
+    const btn = qs('#btnTheme');
+    if (btn) {
+      btn.textContent = m === 'auto' ? '◑' : (m === 'dark' ? '☾' : '☀');
+      btn.title = '外观：' + (m === 'auto' ? '跟随系统' : m === 'dark' ? '深色' : '浅色');
+    }
+    qsa('#themePick [data-theme]').forEach(b => b.classList.toggle('is-on', b.dataset.theme === m));
+  }
+
+  function cycleTheme() {
+    const cur = (Store.state.settings.theme) || 'light';
+    const next = cur === 'light' ? 'dark' : cur === 'dark' ? 'auto' : 'light';
+    applyTheme(next, true);
+    toast('外观：' + (next === 'auto' ? '跟随系统' : next === 'dark' ? '深色' : '浅色'));
+  }
+
   /* ---------------- 顶栏与进度 ---------------- */
   function updateTopStats() {
     const today = Scheduler.todayStr();
     const st = Store.state;
     const day = st.daily[today] || { answered: 0 };
+    const goal = Math.max(10, parseInt(st.settings.dailyGoal, 10) || 50);
+    const done = day.answered || 0;
     let dueCount = 0;
     for (const q of Bank.all) {
       if (Scheduler.isDue(Store.peek(q.id), today)) dueCount++;
     }
-    qs('#tsToday').textContent = day.answered || 0;
+    qs('#tsToday').textContent = done;
+    qs('#tsGoal').textContent = '/ ' + goal;
+    qs('#tsToday').classList.toggle('goal-done', done >= goal);
     qs('#tsDue').textContent = dueCount;
     qs('#tsStreak').textContent = st.meta.streakDays || 0;
     qs('#tsDue').parentElement.classList.toggle('hot', dueCount > 0);
+
+    if (done >= goal && App.goalHit !== today) {
+      App.goalHit = today;
+      if (done > 0) toast('今日目标已达成 ' + done + ' / ' + goal + ' 题');
+    }
   }
 
   function updateProgressLine() {
@@ -661,6 +763,7 @@
   function renderBrowse() {
     const kw = normText(qs('#searchInput').value);
     const onlyWrong = qs('#onlyWrong').checked;
+    const onlyStar = qs('#onlyStar').checked;
     const type = App.browseType;
 
     const rows = Bank.all.filter(q => {
@@ -669,15 +772,24 @@
         const s = Store.peek(q.id);
         if (!s || !(s.wrong > 0)) return false;
       }
+      if (onlyStar) {
+        const s = Store.peek(q.id);
+        if (!s || !s.star) return false;
+      }
       if (kw) {
         const hay = normText(q.stem + ' ' + (q.answerText || '') + ' ' + (q.answer || '') + ' ' +
-          (q.options || []).map(o => o.text).join(' ') + ' ' + (q.blanks || []).join(' '));
+          (q.options || []).map(o => o.text).join(' ') + ' ' + (q.blanks || []).join(' ') + ' ' +
+          ((Store.peek(q.id) || {}).note || ''));
         if (!hay.includes(kw)) return false;
       }
       return true;
     });
 
-    qs('#browseMeta').textContent = '共 ' + rows.length + ' 题' + (kw ? '（关键词：' + qs('#searchInput').value + '）' : '');
+    const tags = [];
+    if (onlyWrong) tags.push('错题');
+    if (onlyStar) tags.push('收藏');
+    if (kw) tags.push('关键词「' + qs('#searchInput').value + '」');
+    qs('#browseMeta').textContent = '共 ' + rows.length + ' 题' + (tags.length ? '（' + tags.join(' · ') + '）' : '');
     const list = qs('#browseList');
     list.innerHTML = '';
     const frag = document.createDocumentFragment();
@@ -690,6 +802,7 @@
 
       const flags = [];
       if (s && s.star) flags.push('<span class="flag">收藏</span>');
+      if (s && s.note && s.note.trim()) flags.push('<span class="flag note">笔记</span>');
       if (s && s.wrong > 0) flags.push('<span class="flag warn">错 ' + s.wrong + '</span>');
       if (s && Scheduler.isMastered(s)) flags.push('<span class="flag ok">已掌握</span>');
 
@@ -702,7 +815,7 @@
 
       const body = document.createElement('div');
       body.className = 'item-body';
-      body.innerHTML = buildItemBody(q, q.stem.length > 90);
+      body.innerHTML = buildItemBody(q, q.stem.length > 90, s);
 
       item.appendChild(head);
       item.appendChild(body);
@@ -712,7 +825,7 @@
     list.appendChild(frag);
   }
 
-  function buildItemBody(q, needFullStem) {
+  function buildItemBody(q, needFullStem, s) {
     let html = needFullStem ? '<div style="white-space:pre-wrap;color:var(--ink2)">' + esc(q.stem) + '</div>' : '';
     if (q.type === 'single' && q.options) {
       html += q.options.map(o =>
@@ -731,7 +844,30 @@
       }
       html += '<div class="ans-line">参考答案：\n' + esc(q.answerText || '（无）') + '</div>';
     }
+    if (s && s.note && s.note.trim()) {
+      html += '<div class="item-note"><b>笔记</b><span>' + esc(s.note) + '</span></div>';
+    }
+    html += '<div class="item-actions"><button class="ghost-btn small-btn" data-practice="' + q.id + '">练这题</button></div>';
     return html;
+  }
+
+  /** 从题库直接进入单题练习 */
+  function practiceOne(id) {
+    const q = Bank.byId[id];
+    if (!q) return;
+    App.filter = q.type;
+    App.chapter = '';
+    App.wrongMode = false;
+    App.starMode = false;
+    App.requeue = {};
+    App.session = { queue: [id], pos: 1, initial: 1 };
+    qsa('#typeChips .chip').forEach(c => c.classList.toggle('is-on', c.dataset.type === q.type));
+    qs('#btnWrongMode').classList.remove('on');
+    qs('#btnStarMode').classList.remove('on');
+    updateChapterUI();
+    switchView('practice');
+    renderQuestion(q);
+    updateProgressLine();
   }
 
   /* ---------------- 统计 ---------------- */
@@ -864,6 +1000,8 @@
     qs('#setNew').value = s.newPerDay;
     qs('#setReview').value = s.reviewPerDay;
     qs('#setRequeue').checked = !!s.requeue;
+    qs('#setGoal').value = s.dailyGoal || 50;
+    applyTheme(s.theme || 'light', false);
   }
 
   function bindSettings() {
@@ -882,6 +1020,24 @@
       Store.save(true);
       toast(e.target.checked ? '答错后当日重现：开' : '答错后当日重现：关');
     });
+
+    qs('#setGoal').addEventListener('change', e => {
+      const v = Math.max(10, Math.min(400, parseInt(e.target.value, 10) || 50));
+      Store.state.settings.dailyGoal = v;
+      e.target.value = v;
+      Store.save(true);
+      updateTopStats();
+      toast('每日目标：' + v + ' 题');
+    });
+
+    qs('#themePick').addEventListener('click', e => {
+      const b = e.target.closest('[data-theme]');
+      if (!b) return;
+      applyTheme(b.dataset.theme, true);
+      toast('外观：' + (b.dataset.theme === 'auto' ? '跟随系统' : b.dataset.theme === 'dark' ? '深色' : '浅色'));
+    });
+
+    qs('#btnTheme').addEventListener('click', cycleTheme);
 
     qs('#btnExport').addEventListener('click', () => {
       const blob = new Blob([Store.exportJSON()], { type: 'application/json' });
@@ -924,6 +1080,8 @@
           } else {
             md += '**参考答案：**\n\n' + (q.answerText || '（无）') + '\n';
           }
+          const nt = (Store.peek(q.id) || {}).note;
+          if (nt && nt.trim()) md += '\n> **我的笔记：** ' + nt.trim().replace(/\n+/g, ' ') + '\n';
         });
       });
 
@@ -998,6 +1156,29 @@
       else startSession(App.filter, { wrongOnly: true });
     });
 
+    qs('#btnStarMode').addEventListener('click', () => {
+      if (App.starMode) startSession(App.filter, {});
+      else startSession(App.filter, { starOnly: true });
+    });
+
+    // 笔记
+    qs('#btnNote').addEventListener('click', () => {
+      if (qs('#noteBox').hidden) openNote();
+      else closeNote();
+    });
+    qs('#noteClose').addEventListener('click', closeNote);
+    qs('#noteSave').addEventListener('click', saveNote);
+    qs('#noteClear').addEventListener('click', () => {
+      qs('#noteInput').value = '';
+      saveNote();
+    });
+    qs('#noteInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        saveNote();
+      }
+    });
+
     qs('#btnNext').addEventListener('click', () => nextQuestion());
 
     qs('#btnExtra').addEventListener('click', () => {
@@ -1043,6 +1224,7 @@
   function bindBrowse() {
     qs('#searchInput').addEventListener('input', () => renderBrowse());
     qs('#onlyWrong').addEventListener('change', () => renderBrowse());
+    qs('#onlyStar').addEventListener('change', () => renderBrowse());
     qs('#browseChips').addEventListener('click', e => {
       const b = e.target.closest('.chip');
       if (!b) return;
@@ -1051,6 +1233,12 @@
       renderBrowse();
     });
     qs('#browseList').addEventListener('click', e => {
+      const p = e.target.closest('[data-practice]');
+      if (p) {
+        e.stopPropagation();
+        practiceOne(p.dataset.practice);
+        return;
+      }
       const head = e.target.closest('.item-head');
       if (!head) return;
       head.parentElement.classList.toggle('open');
@@ -1073,6 +1261,8 @@
       const tag = (e.target.tagName || '').toLowerCase();
       const inInput = tag === 'input' || tag === 'textarea';
 
+      if (e.key === 'Escape' && !qs('#noteBox').hidden) { closeNote(); return; }
+
       if (e.key === 'Enter') {
         if (App.answered) { e.preventDefault(); nextQuestion(); return; }
         if (inInput || (App.current && App.current.type === 'blank' && !App.answered)) { submitBlank(); return; }
@@ -1090,6 +1280,7 @@
 
       const k = e.key.toLowerCase();
       if (k === 's' && App.current) { qs('#btnStar').click(); return; }
+      if (k === 'n' && App.current) { qs('#btnNote').click(); return; }
       if (['1', '2', '3', '4'].includes(k)) {
         if (!App.current || App.answered) return;
         if (App.current.type === 'single') {
@@ -1110,6 +1301,22 @@
     bindSettings();
     bindKeys();
     applySettingsToUI();
+
+    // 启动时若目标已达成，不重复提示
+    const d0 = Store.state.daily[Scheduler.todayStr()] || {};
+    if ((d0.answered || 0) >= (Store.state.settings.dailyGoal || 50)) {
+      App.goalHit = Scheduler.todayStr();
+    }
+    // 系统主题变化时自动跟随
+    if (window.matchMedia) {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      const onChange = () => {
+        if ((Store.state.settings.theme || 'light') === 'auto') applyTheme('auto', false);
+      };
+      if (mq.addEventListener) mq.addEventListener('change', onChange);
+      else if (mq.addListener) mq.addListener(onChange);
+    }
+
     updateTopStats();
     startSession('all', {});
     if (window.Typing) Typing.init();

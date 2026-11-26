@@ -38,7 +38,60 @@ const Exam = (() => {
       .concat(singles.slice(0, ns))
       .concat(judges.slice(0, nj))
       .concat(blanks.slice(0, nb));
-    return pick.map(q => ({ q, answer: q.type === 'blank' ? [] : null, ok: null }));
+    return pick.map(q => ({ q, answer: q.type === 'blank' ? [] : null, ok: null, flag: false }));
+  }
+
+  function isAnswered(it) {
+    return it.q.type === 'blank'
+      ? (it.answer || []).some(v => String(v || '').trim())
+      : !!it.answer;
+  }
+
+  function renderSheet() {
+    const grid = $('esGrid');
+    grid.innerHTML = session.items.map((it, i) =>
+      '<button class="es-cell" data-i="' + i + '">' + (i + 1) + '</button>'
+    ).join('');
+    $('examSheet').classList.remove('folded');
+    $('esToggle').textContent = '收起';
+    syncSheet();
+  }
+
+  function syncSheet() {
+    if (!session) return;
+    const cells = qsa('.es-cell', $('esGrid'));
+    cells.forEach((el, i) => {
+      const it = session.items[i];
+      if (!it) return;
+      el.classList.toggle('done', isAnswered(it));
+      el.classList.toggle('flag', !!it.flag);
+    });
+    const n = session.items.filter(isAnswered).length;
+    const f = session.items.filter(it => it.flag).length;
+    $('esStat').textContent = '已答 ' + n + ' / ' + session.items.length + (f ? '　标记 ' + f : '');
+  }
+
+  function jumpTo(i) {
+    const card = $('examList').querySelector('.exam-q[data-i="' + i + '"]');
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('hit');
+    void card.offsetWidth;
+    card.classList.add('hit');
+    const inp = card.querySelector('input');
+    if (inp) setTimeout(() => inp.focus({ preventScroll: true }), 320);
+  }
+
+  function toggleFlag(i) {
+    const it = session.items[i];
+    if (!it) return;
+    it.flag = !it.flag;
+    const card = $('examList').querySelector('.exam-q[data-i="' + i + '"]');
+    if (card) {
+      const b = card.querySelector('.es-flag');
+      if (b) b.classList.toggle('on', it.flag);
+    }
+    syncSheet();
   }
 
   function renderStart() {
@@ -73,7 +126,9 @@ const Exam = (() => {
 
       let head = '<div class="exam-qhead"><span class="badge t-' + q.type + '">' + (TYPE_SHORT[q.type] || '') + '</span>' +
         '<span class="qno">第 ' + (i + 1) + ' 题</span>' +
-        (q.chapter ? '<span class="qchapter">' + esc(q.chapter) + '</span>' : '') + '</div>';
+        (q.chapter ? '<span class="qchapter">' + esc(q.chapter) + '</span>' : '') +
+        '<span class="eq-right"><button class="icon-btn es-flag" data-i="' + i + '" title="标记待定，交卷前快速定位">⚑</button></span>' +
+        '</div>';
 
       let body = '';
       if (q.type === 'single') {
@@ -96,6 +151,7 @@ const Exam = (() => {
       list.appendChild(card);
     });
 
+    renderSheet();
     updateProgress();
     startTimer();
   }
@@ -117,10 +173,9 @@ const Exam = (() => {
   }
 
   function updateProgress() {
-    const answered = session.items.filter(it =>
-      it.q.type === 'blank' ? (it.answer || []).some(v => String(v || '').trim()) : !!it.answer
-    ).length;
+    const answered = session.items.filter(isAnswered).length;
     $('examDone').textContent = answered + ' / ' + session.items.length;
+    syncSheet();
   }
 
   function onPick(i, key) {
@@ -241,6 +296,18 @@ const Exam = (() => {
     renderStart();
   }
 
+  function confirmSubmit() {
+    if (!session) return false;
+    const missing = session.items.map((it, i) => ({ it, i })).filter(x => !isAnswered(x.it));
+    const flags = session.items.filter(it => it.flag).length;
+    if (missing.length) {
+      const nos = missing.slice(0, 12).map(x => x.i + 1).join('、');
+      return confirm('还有 ' + missing.length + ' 题未作答（第 ' + nos + (missing.length > 12 ? ' 等' : '') + ' 题）。确定交卷吗？');
+    }
+    if (flags) return confirm('还有 ' + flags + ' 题标记为待定，确定交卷吗？');
+    return confirm('确定交卷吗？');
+  }
+
   function bind() {
     $('examBegin').addEventListener('click', begin);
     $('examBack').addEventListener('click', backHome);
@@ -248,14 +315,24 @@ const Exam = (() => {
     $('examHome').addEventListener('click', backHome);
 
     $('examSubmit').addEventListener('click', () => {
-      const unanswered = session.items.filter(it =>
-        it.q.type === 'blank' ? !(it.answer || []).some(v => String(v || '').trim()) : !it.answer
-      ).length;
-      const msg = unanswered ? '还有 ' + unanswered + ' 题未作答，确定交卷吗？' : '确定交卷吗？';
-      if (confirm(msg)) submit(false);
+      if (confirmSubmit()) submit(false);
+    });
+
+    // 答题卡跳转
+    $('esGrid').addEventListener('click', e => {
+      const cell = e.target.closest('.es-cell');
+      if (!cell) return;
+      jumpTo(parseInt(cell.dataset.i, 10));
+    });
+
+    $('esToggle').addEventListener('click', () => {
+      const folded = $('examSheet').classList.toggle('folded');
+      $('esToggle').textContent = folded ? '展开' : '收起';
     });
 
     $('examList').addEventListener('click', e => {
+      const fb = e.target.closest('.es-flag');
+      if (fb) { toggleFlag(parseInt(fb.dataset.i, 10)); return; }
       const b = e.target.closest('[data-i]');
       if (!b || b.tagName === 'INPUT') return;
       const i = parseInt(b.dataset.i, 10);
@@ -272,9 +349,10 @@ const Exam = (() => {
     // 快捷键：交卷前可用 Esc 返回确认
     document.addEventListener('keydown', e => {
       if (window.__SSQ__ && window.__SSQ__.App.view !== 'exam') return;
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
       if (e.key === 'Escape' && session && !session.done) {
-        const unanswered = session.items.filter(it => !it.answer || (Array.isArray(it.answer) && !it.answer.some(v => String(v || '').trim()))).length;
-        if (confirm(unanswered ? '还有 ' + unanswered + ' 题未作答，确定交卷吗？' : '确定交卷吗？')) submit(false);
+        if (confirmSubmit()) submit(false);
       }
     });
   }

@@ -4,7 +4,7 @@ import sys, os, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 from docx import Document
 
-BASE = r"Q:\10_学习课程\2025-2026_Semester1\IS调查理论与方法"
+BASE = os.environ.get("QUIZ_SRC") or os.getcwd()
 OUT = os.path.dirname(os.path.abspath(__file__))
 FILES = {
     "single": "单项选择题库.docx",

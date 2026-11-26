@@ -7,8 +7,12 @@ import sys, os, io, re, json
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 from docx import Document
 
-BASE = r"Q:\10_学习课程\2025-2026_Semester1\IS调查理论与方法"
-OUT_DIR = r"D:\70_Workspace\AI_WorkSpace\WorkBuddy_Space\IS调查理论与方法\背诵题库"
+# 题库 docx 所在目录：优先取环境变量 QUIZ_SRC，其次当前工作目录
+BASE = os.environ.get("QUIZ_SRC") or os.getcwd()
+# 输出目录 = 本脚本所在仓库的根（_tools/ 的上一级）
+OUT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if not os.path.isdir(BASE):
+    sys.exit("找不到题库目录：%s\n请设置环境变量 QUIZ_SRC 指向存放 docx 的文件夹。" % BASE)
 os.makedirs(os.path.join(OUT_DIR, "data"), exist_ok=True)
 
 ANS_RE = re.compile(r'^【\s*(参考答案|答案)\s*】')

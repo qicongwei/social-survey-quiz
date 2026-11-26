@@ -4,6 +4,16 @@
 
 Electron 33 + 原生 HTML/CSS/JS，无前端框架、无构建步骤。
 
+## 下载
+
+Windows 64 位：到 [Releases](https://github.com/qicongwei/social-survey-quiz/releases/latest) 下载 `社会调查背诵题库-*-win32-x64.zip`，解压后双击文件夹里的 `社会调查背诵题库.exe`。
+
+- **整个文件夹一起用**，exe 依赖同目录的 dll 与 `resources/`，单独复制 exe 到别处跑不起来
+- 免安装、不联网，进度存在 `%APPDATA%\社会调查背诵题库\progress.json`
+- 首次运行若弹「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」（未做数字签名，属正常现象）
+
+想自行构建或改代码见下方「开发运行」。
+
 ![练习](docs/preview.png)
 
 ![答对后自动进入下一题](docs/auto-next.png)
@@ -121,15 +131,20 @@ node_modules\.bin\electron-packager . 社会调查背诵题库 ^
 
 ## 更新题库
 
-1. 替换同名 docx 到课程目录
-2. 修改 `_tools/parse.py` 顶部的 `BASE` 路径
-3. `python _tools/parse.py` —— 重新解析并自动同步 `app/renderer/data/questions.js`
-4. 查看 `_tools/validate.txt` 的告警，必要时补充解析规则
+1. 把 5 个题库 docx（单选 / 判断 / 填空 / 名解简答 / 实操）放到同一个文件夹，文件名保持不变
+2. 让脚本找到这批 docx（不设则用当前工作目录）：
+   ```bash
+   set QUIZ_SRC=D:\path\to\docx_dir
+   python _tools\parse.py
+   ```
+   脚本会重新解析并在 `_tools/validate.txt` 写校验报告，同时自动同步 `app/renderer/data/questions.js`
+3. 看报告里的告警，必要时在 `_tools/parse.py` 补解析规则
 
 ## 数据来源与声明
 
-题库来自课程发放的《社会调查教程》配套练习材料，仅用于个人复习，不做二次分发。题目著作权归原编者与出版方所有。
+题库来自课程发放的《社会调查教程》配套练习材料，仅用于个人复习。题目著作权归原编者与出版方所有，**本项目不对题库内容主张任何权利，也不鼓励再分发**。
 
 ## 许可
 
-代码部分 MIT。题库内容不在授权范围内。
+代码与构建脚本：MIT，见 [LICENSE](LICENSE)。
+题库内容不在 MIT 授权范围内，仅限个人学习使用。

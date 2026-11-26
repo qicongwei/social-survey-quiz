@@ -267,6 +267,18 @@ app.whenReady().then(async () => {
   await win.webContents.executeJavaScript(`document.querySelector('[data-view="stats"]').click(); true`);
   await sleep(550);
   await shot('25-dark-stats');
+
+  // 深色背题页（显示答案状态）
+  await win.webContents.executeJavaScript(`document.querySelector('[data-view="recite"]').click(); true`);
+  await sleep(400);
+  await win.webContents.executeJavaScript(`
+    (function(){
+      if (document.getElementById('rcReveal').hidden === false) document.getElementById('rcShow').click();
+      return true;
+    })()
+  `);
+  await sleep(300);
+  await shot('29-dark-recite');
   await win.webContents.executeJavaScript(`document.querySelector('[data-view="practice"]').click(); true`);
   await sleep(300);
 
@@ -410,6 +422,99 @@ app.whenReady().then(async () => {
   console.log('EXAM_SUBMIT:' + JSON.stringify(examSubmit));
   await sleep(400);
   await shot('15-exam-result');
+
+  // ---------- 背题模式 ----------
+  await win.webContents.executeJavaScript(`document.querySelector('[data-view="recite"]').click(); true`);
+  await sleep(450);
+  const rc1 = await win.webContents.executeJavaScript(`(function(){
+    return {
+      view: window.__SSQ__.App.view,
+      pos: document.getElementById('rcPos').textContent,
+      type: document.getElementById('rcType').textContent,
+      stemLen: (document.getElementById('rcStem').textContent||'').length,
+      revealShown: !document.getElementById('rcReveal').hidden,
+      answerHidden: document.getElementById('rcAnswer').hidden,
+      gradeHidden: document.getElementById('rcGrade').hidden,
+      queue: window.Recite.state.order.length
+    };
+  })()`);
+  console.log('RECITE:' + JSON.stringify(rc1));
+  await shot('26-recite');
+
+  const rc2 = await win.webContents.executeJavaScript(`(function(){
+    const st = window.Recite.state;
+    const id = st.order[st.pos];
+    const s = Store.peek(id) || {};
+    document.getElementById('rcShow').click();
+    return {
+      id: id,
+      answerShown: !document.getElementById('rcAnswer').hidden,
+      gradeShown: !document.getElementById('rcGrade').hidden,
+      rightOpts: document.querySelectorAll('.rc-opt.right').length,
+      blanks: document.querySelectorAll('.rc-blank').length,
+      repsBefore: s.reps||0, intervalBefore: s.interval||0
+    };
+  })()`);
+  console.log('RECITE_ANSWER:' + JSON.stringify(rc2));
+  await shot('27-recite-answer');
+
+  const rc3 = await win.webContents.executeJavaScript(`(function(){
+    const today = Scheduler.todayStr();
+    const d0 = (Store.state.daily[today]||{}).recited||0;
+    document.querySelector('.rc-g-pass').click();
+    return { recitedBefore: d0 };
+  })()`);
+  await sleep(450);
+  const rc4 = await win.webContents.executeJavaScript(`(function(){
+    const st = window.Recite.state;
+    const today = Scheduler.todayStr();
+    const d = Store.state.daily[today]||{};
+    const s = Store.peek(${JSON.stringify(rc2.id)});
+    return {
+      recitedAfter: d.recited||0,
+      pos: document.getElementById('rcPos').textContent,
+      posIndex: st.pos,
+      revealBack: !document.getElementById('rcReveal').hidden,
+      answerResetHidden: document.getElementById('rcAnswer').hidden,
+      pass: ((s&&s.recite)||{}).pass||0,
+      rounds: ((s&&s.recite)||{}).rounds||0,
+      repsAfter: (s&&s.reps)||0,
+      intervalAfter: (s&&s.interval)||0
+    };
+  })()`);
+  console.log('RECITE_GRADE:' + JSON.stringify(Object.assign({}, rc3, rc4)));
+
+  // 结算页：临时把队列截成 2 题，连过两题
+  const rc5 = await win.webContents.executeJavaScript(`(function(){
+    window.Recite.build();
+    const st = window.Recite.state;
+    st.order = st.order.slice(0, 2);
+    st.pos = 0;
+    window.Recite.refresh();
+    return st.order.length;
+  })()`);
+  await win.webContents.executeJavaScript(`document.getElementById('rcShow').click(); document.querySelector('.rc-g-fail').click(); true`);
+  await sleep(300);
+  await win.webContents.executeJavaScript(`document.getElementById('rcShow').click(); document.querySelector('.rc-g-pass').click(); true`);
+  await sleep(400);
+  const rcDone = await win.webContents.executeJavaScript(`(function(){
+    return {
+      doneShown: !document.getElementById('rcDone').hidden,
+      hero: (document.querySelector('.rd-hero b')||{}).textContent,
+      items: Array.from(document.querySelectorAll('.rd-items b')).map(function(b){return b.textContent;}),
+      failedBtn: !!document.getElementById('rdFailed')
+    };
+  })()`);
+  console.log('RECITE_DONE:' + JSON.stringify(Object.assign({ queue: rc5 }, rcDone)));
+  await shot('28-recite-done');
+
+  const rc6 = await win.webContents.executeJavaScript(`(function(){
+    document.getElementById('rdFailed').click();
+    const st = window.Recite.state;
+    return { queue: st.order.length, pos: st.pos, doneHidden: document.getElementById('rcDone').hidden };
+  })()`);
+  console.log('RECITE_RETRY_FAILED:' + JSON.stringify(rc6));
+  await win.webContents.executeJavaScript(`window.Recite.build(); true`);
 
   // ---------- 统计（含热力图） ----------
   await win.webContents.executeJavaScript(`document.querySelector('[data-view="stats"]').click(); true`);

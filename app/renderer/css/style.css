@@ -729,6 +729,7 @@ kbd{
 
 /* 题库中的笔记与标记 */
 .flag.note{background:var(--brand-soft);color:var(--brand)}
+.flag.rec{background:var(--purple-soft);color:var(--purple)}
 .item-note{
   margin-top:10px;padding:9px 12px;
   border-left:3px solid var(--brand);border-radius:0 8px 8px 0;
@@ -790,7 +791,94 @@ kbd{
 /* 深色下被遮盖的句子会因模糊变成亮斑，压低亮度更接近“看不清但知道有内容” */
 :root[data-theme="dark"] .seg:not(.open) .seg-txt{opacity:.62}
 
+/* ===== 背题模式 ===== */
+.rc-note{font-size:11.5px;color:var(--ink3);margin-left:auto}
+
+.rc-bar{margin-bottom:12px}
+.rc-prog{height:4px;background:var(--track);border-radius:99px;overflow:hidden}
+.rc-prog i{display:block;height:100%;background:var(--brand);border-radius:99px;transition:width .25s ease}
+.rc-meta{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:12px;color:var(--ink3)}
+.rc-meta b{color:var(--ink2);font-variant-numeric:tabular-nums;font-weight:600}
+.rc-meta span{font-variant-numeric:tabular-nums}
+
+.rc-card{display:flex;flex-direction:column;min-height:min(52vh,430px)}
+.rc-times{font-size:11px;color:var(--ink3);background:var(--track);padding:2px 8px;border-radius:99px;font-variant-numeric:tabular-nums}
+.rc-stem{font-size:21px;line-height:1.85;margin-bottom:6px}
+.rc-hole{display:inline-block;min-width:26px;text-align:center;color:var(--brand);font-weight:600;border-bottom:1.5px solid var(--edge)}
+
+.rc-reveal{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px 0}
+.rc-reveal .primary-btn{padding:13px 32px;font-size:15px}
+.rc-tip{margin:0;font-size:12px;color:var(--ink3)}
+
+.rc-answer{margin-top:16px;padding-top:16px;border-top:1px dashed var(--line);animation:fade .2s ease both}
+.rc-opts{display:flex;flex-direction:column;gap:8px}
+.rc-opt{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);font-size:14.5px;line-height:1.6}
+.rc-opt b{flex-shrink:0;width:20px;height:20px;border-radius:50%;background:var(--track);color:var(--ink2);font-size:11.5px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.rc-opt span{flex:1;word-break:break-word}
+.rc-opt em{font-style:normal;font-size:11px;color:var(--ok);background:var(--ok-soft);padding:2px 7px;border-radius:99px;flex-shrink:0;align-self:center}
+.rc-opt.right{border-color:var(--ok);background:var(--ok-soft)}
+.rc-opt.right b{background:var(--ok);color:var(--surface)}
+
+.rc-judge{display:flex;gap:12px}
+.rc-judge .rj{flex:1;text-align:center;padding:14px;border:1px solid var(--line);border-radius:10px;font-size:16px;color:var(--ink3);background:var(--surface-2)}
+.rc-judge .rj.on{border-color:var(--ok);background:var(--ok-soft);color:var(--ok);font-weight:600}
+
+.rc-blanks{display:flex;flex-direction:column;gap:8px}
+.rc-blank{display:flex;align-items:baseline;gap:12px;padding:10px 14px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px}
+.rc-blank span{font-size:11.5px;color:var(--ink3);flex-shrink:0;min-width:44px}
+.rc-blank b{font-size:15.5px;font-weight:600;color:var(--ok)}
+
+.rc-text{font-size:15.5px;line-height:1.95;color:var(--ink);white-space:pre-wrap;word-break:break-word}
+.rc-explain{margin-top:12px;padding:10px 14px;background:var(--surface-3);border-left:3px solid var(--edge);border-radius:0 8px 8px 0;font-size:13px;line-height:1.7;color:var(--ink2);white-space:pre-wrap}
+.rc-explain b{display:block;font-size:11px;color:var(--ink3);margin-bottom:3px;letter-spacing:.4px}
+
+.rc-grade{display:flex;gap:10px;margin-top:18px}
+.rc-g{flex:1;padding:13px 0;border-radius:11px;border:1px solid var(--line);background:var(--surface);font-size:14px;font-weight:600;color:var(--ink2);transition:all .14s;display:flex;align-items:center;justify-content:center;gap:7px}
+.rc-g kbd{background:var(--track);border-color:var(--line);color:var(--ink3);font-size:10px}
+.rc-g-fail{color:var(--bad)}
+.rc-g-fuzzy{color:var(--warn)}
+.rc-g-pass{color:var(--ok)}
+.rc-g-fail kbd,.rc-g-fuzzy kbd,.rc-g-pass kbd{color:inherit;opacity:.72}
+.rc-g:active{transform:none}
+.rc-g-fail:hover{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
+.rc-g-fuzzy:hover{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+.rc-g-pass:hover{border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}
+
+.rc-done{padding:24px 0 10px;text-align:center;animation:fade .24s ease both}
+.rd-hero{display:flex;align-items:baseline;justify-content:center;gap:9px;flex-wrap:wrap}
+.rd-hero b{font-size:52px;font-weight:600;letter-spacing:-2px;line-height:1;font-variant-numeric:tabular-nums}
+.rd-hero.good b{color:var(--ok)}
+.rd-hero.mid b{color:var(--brand)}
+.rd-hero.weak b{color:var(--bad)}
+.rd-hero span{font-size:14px;color:var(--ink2)}
+.rd-hero em{font-style:normal;display:block;width:100%;font-size:12.5px;color:var(--ink3);margin-top:4px}
+.rd-items{display:flex;justify-content:center;gap:36px;margin:22px 0 4px}
+.rd-items > div{display:flex;flex-direction:column;gap:2px}
+.rd-items span{font-size:11.5px;color:var(--ink3)}
+.rd-items b{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.rd-items b.ok{color:var(--ok)}
+.rd-items b.warn{color:var(--warn)}
+.rd-items b.bad{color:var(--bad)}
+.rd-btns{justify-content:center;margin-top:22px}
+.rd-tip{margin:16px 0 0;font-size:11.5px;color:var(--ink3)}
+.rc-empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:46px 0}
+.rc-empty b{font-size:15px;font-weight:600;color:var(--ink2)}
+.rc-empty span{font-size:12.5px;color:var(--ink3)}
+
+/* 背题覆盖 */
+.rs-grid{display:flex;gap:34px;margin-bottom:14px;flex-wrap:wrap}
+.rs-grid>div{display:flex;flex-direction:column;gap:2px}
+.rs-grid span{font-size:11.5px;color:var(--ink3)}
+.rs-grid b{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
+.rs-grid b.ok{color:var(--ok)}
+.rs-grid b.bad{color:var(--bad)}
+.rs-grid em{font-style:normal;font-size:11px;color:var(--ink3);margin-left:2px}
+.rs-bar{height:6px;background:var(--track);border-radius:99px;overflow:hidden}
+.rs-bar i{display:block;height:100%;background:var(--brand);border-radius:99px}
+.rs-note{margin:8px 0 0;font-size:11.5px;color:var(--ink3)}
+
 @media (max-width:820px){
+  .rc-note{display:none}
   .exam-bar{top:96px}
   .type-stats{flex-wrap:wrap;gap:6px}
   .type-stats>div{flex:1 1 28%}

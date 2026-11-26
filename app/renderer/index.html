@@ -22,6 +22,7 @@
 
     <nav class="tabs" id="tabs">
       <button class="tab is-active" data-view="practice">练习</button>
+      <button class="tab" data-view="recite">背题</button>
       <button class="tab" data-view="typing">打字</button>
       <button class="tab" data-view="exam">模考</button>
       <button class="tab" data-view="browse">题库</button>
@@ -106,6 +107,77 @@
       <div class="card-actions" id="cardActions">
         <div class="hint" id="hint">按 <kbd>1</kbd>–<kbd>4</kbd> 选择 · <kbd>Enter</kbd> 下一题</div>
         <button class="primary-btn big" id="btnNext" hidden>下一题 <kbd>↵</kbd></button>
+      </div>
+    </section>
+
+    <!-- ============ 背题（沉浸过题，不写排程） ============ -->
+    <section class="view" id="view-recite" hidden>
+      <div class="filters">
+        <div class="chips" id="reciteChips">
+          <button class="chip is-on" data-type="all">全部</button>
+          <button class="chip" data-type="single">单选</button>
+          <button class="chip" data-type="judge">判断</button>
+          <button class="chip" data-type="blank">填空</button>
+          <button class="chip" data-type="short">名解简答</button>
+          <button class="chip" data-type="prac">实操</button>
+        </div>
+        <select id="reciteScope" class="chapter-select" title="选择背诵范围">
+          <option value="all">全部题目</option>
+          <option value="unmastered">只背未掌握</option>
+          <option value="star">只背收藏</option>
+          <option value="wrong">只背错题</option>
+        </select>
+        <button class="ghost-btn" id="reciteShuffle" title="打乱顺序">乱序</button>
+        <span class="rc-note">背题只记遍数，不改动复习排程</span>
+      </div>
+
+      <div class="rc-bar">
+        <div class="rc-prog"><i id="rcBar" style="width:0%"></i></div>
+        <div class="rc-meta">
+          <b id="rcPos">0 / 0</b>
+          <span id="rcRound">本轮　会 0 · 模糊 0 · 不会 0</span>
+        </div>
+      </div>
+
+      <div class="card rc-card" id="rcCard">
+        <div class="qhead">
+          <div class="qhead-left">
+            <span class="badge" id="rcType">单选</span>
+            <span class="qno" id="rcNo">第 1 题</span>
+            <span class="qchapter" id="rcChapter"></span>
+            <span class="rc-times" id="rcTimes"></span>
+          </div>
+          <div class="qhead-right">
+            <button class="icon-btn" id="rcSpeak" title="朗读题目">♪</button>
+            <button class="icon-btn" id="rcStar" title="收藏（S）">☆</button>
+          </div>
+        </div>
+
+        <div class="stem rc-stem" id="rcStem"></div>
+
+        <div class="rc-reveal" id="rcReveal">
+          <button class="primary-btn" id="rcShow">显示答案 <kbd>Space</kbd></button>
+          <p class="rc-tip">先在心里完整过一遍，再核对</p>
+        </div>
+
+        <div class="rc-answer" id="rcAnswer" hidden></div>
+
+        <div class="rc-grade" id="rcGrade" hidden>
+          <button class="rc-g rc-g-fail" data-g="fail">不会<kbd>1</kbd></button>
+          <button class="rc-g rc-g-fuzzy" data-g="fuzzy">模糊<kbd>2</kbd></button>
+          <button class="rc-g rc-g-pass" data-g="pass">会了<kbd>3</kbd></button>
+        </div>
+
+        <div class="rc-done" id="rcDone" hidden></div>
+      </div>
+
+      <div class="card-actions">
+        <div class="hint"><kbd>←</kbd> <kbd>→</kbd> 切换 · <kbd>Space</kbd> 看答案 · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 评价</div>
+        <div class="row-btns">
+          <button class="ghost-btn" id="rcPrev">上一题</button>
+          <button class="ghost-btn" id="rcNext">下一题</button>
+          <button class="ghost-btn" id="rcReset">重新开始</button>
+        </div>
       </div>
     </section>
 
@@ -274,6 +346,13 @@
       </div>
 
       <div class="panel">
+        <h3>背题覆盖 <small>（只记遍数，不影响复习排程）</small></h3>
+        <div class="rs-grid" id="reciteSum"></div>
+        <div class="rs-bar"><i id="reciteBar" style="width:0%"></i></div>
+        <p class="rs-note" id="reciteNote"></p>
+      </div>
+
+      <div class="panel">
         <h3>未来 7 天到期量</h3>
         <div class="chart" id="dueChart"></div>
       </div>
@@ -365,6 +444,8 @@
           <div><kbd>S</kbd><span>收藏本题</span></div>
           <div><kbd>N</kbd><span>记笔记</span></div>
           <div><kbd>Esc</kbd><span>收起笔记</span></div>
+          <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>背题：不会 / 模糊 / 会了</span></div>
+          <div><kbd>←</kbd><kbd>→</kbd><span>背题：上一题 / 下一题</span></div>
         </div>
       </div>
 
@@ -384,6 +465,7 @@
 <script src="js/scheduler.js"></script>
 <script src="js/typing.js"></script>
 <script src="js/exam.js"></script>
+<script src="js/recite.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

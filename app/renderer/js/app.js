@@ -804,6 +804,7 @@
       if (s && s.star) flags.push('<span class="flag">收藏</span>');
       if (s && s.note && s.note.trim()) flags.push('<span class="flag note">笔记</span>');
       if (s && s.wrong > 0) flags.push('<span class="flag warn">错 ' + s.wrong + '</span>');
+      if (s && s.recite && s.recite.rounds) flags.push('<span class="flag rec">背 ' + s.recite.rounds + '</span>');
       if (s && Scheduler.isMastered(s)) flags.push('<span class="flag ok">已掌握</span>');
 
       const head = document.createElement('div');
@@ -911,6 +912,33 @@
       rows.appendChild(row);
     });
 
+    // 背题覆盖
+    const rs = qs('#reciteSum');
+    if (rs) {
+      let covered = 0, rounds = 0, rpass = 0, rfail = 0, rfuzzy = 0;
+      Bank.all.forEach(q => {
+        const s = Store.peek(q.id);
+        const r = s && s.recite;
+        if (!r) return;
+        covered++;
+        rounds += r.rounds || 0;
+        rpass += r.pass || 0;
+        rfuzzy += r.fuzzy || 0;
+        rfail += r.fail || 0;
+      });
+      rs.innerHTML =
+        '<div><span>已背过</span><b>' + covered + '<em>/ ' + Bank.all.length + '</em></b></div>' +
+        '<div><span>累计遍数</span><b>' + rounds + '<em>遍</em></b></div>' +
+        '<div><span>会了</span><b class="ok">' + rpass + '</b></div>' +
+        '<div><span>模糊</span><b>' + rfuzzy + '</b></div>' +
+        '<div><span>不会</span><b class="bad">' + rfail + '</b></div>';
+      const pc = Bank.all.length ? Math.round((covered / Bank.all.length) * 100) : 0;
+      qs('#reciteBar').style.width = pc + '%';
+      qs('#reciteNote').textContent = covered
+        ? '覆盖 ' + pc + '% 的题库 · 平均每题背过 ' + (rounds / covered).toFixed(1) + ' 遍'
+        : '还没有背题记录。去「背题」页一屏一题地过一遍，这里会显示覆盖情况。';
+    }
+
     // 未来 7 天
     const chart = qs('#dueChart');
     chart.innerHTML = '';
@@ -959,7 +987,7 @@
       for (let i = 83; i >= 0; i--) {
         const d = Scheduler.addDays(today, -i);
         const day = st.daily[d] || {};
-        const n = (day.answered || 0) + Math.round((day.typed || 0) / 60) + (day.exams || 0) * 5;
+        const n = (day.answered || 0) + Math.round((day.typed || 0) / 60) + (day.exams || 0) * 5 + Math.round((day.recited || 0) / 3);
         if (n > 0) { activeDays++; totalActs += n; }
         const lv = n >= 31 ? 'l4' : n >= 16 ? 'l3' : n >= 6 ? 'l2' : n >= 1 ? 'l1' : '';
         cells.push('<i class="' + lv + '" title="' + d + '：' + n + (n ? ' 次练习' : '') + '"></i>');
@@ -1131,9 +1159,10 @@
   function switchView(v) {
     App.view = v;
     qsa('#tabs .tab').forEach(b => b.classList.toggle('is-active', b.dataset.view === v));
-    ['practice', 'typing', 'exam', 'browse', 'stats', 'settings'].forEach(k => {
+    ['practice', 'recite', 'typing', 'exam', 'browse', 'stats', 'settings'].forEach(k => {
       qs('#view-' + k).hidden = k !== v;
     });
+    if (v === 'recite' && window.Recite) Recite.onEnter();
     if (v === 'browse') renderBrowse();
     if (v === 'stats') renderStats();
     if (v === 'settings') applySettingsToUI();
@@ -1321,6 +1350,7 @@
     startSession('all', {});
     if (window.Typing) Typing.init();
     if (window.Exam) Exam.init();
+    if (window.Recite) Recite.init();
   }
 
   document.addEventListener('DOMContentLoaded', init);

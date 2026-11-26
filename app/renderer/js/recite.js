@@ -16,7 +16,8 @@ const Recite = (() => {
     revealed: false,
     round: { pass: 0, fuzzy: 0, fail: 0 },
     failed: [],
-    lock: false
+    lock: false,
+    cells: []               // 填空题打字区：每空 { ref, cells, input, row }
   };
 
   const bank = () => (window.__SSQ__ && window.__SSQ__.Bank.all) || [];
@@ -82,6 +83,29 @@ const Recite = (() => {
     return h;
   }
 
+  /* 填空题的「照着答案打一遍」输入区 */
+  function typeBoxHTML(q) {
+    const n = (q.blanks || []).length;
+    if (!n) return '';
+    const rows = (q.blanks || []).map((b, i) =>
+      '<div class="rt-row" data-i="' + i + '">' +
+        (n > 1 ? '<span class="rt-no">' + (i + 1) + '</span>' : '') +
+        '<input class="rt-in" type="text" data-in="' + i + '" autocomplete="off" autospellcheck="false" ' +
+          'spellcheck="false" placeholder="' + (n > 1 ? '第 ' + (i + 1) + ' 空' : '照着答案敲一遍') + '">' +
+        '<span class="rt-mark"></span>' +
+      '</div>'
+    ).join('');
+    return '<div class="rc-type" id="rcTypeBox">' +
+      '<div class="rt-head">' +
+        '<b>照着答案打一遍</b>' +
+        '<span class="rt-stat" id="rtStat">0 / ' + n + '</span>' +
+        '<button class="ghost-btn rt-reset" data-rt="reset" title="清空重打">重打</button>' +
+      '</div>' +
+      '<div class="rt-rows">' + rows + '</div>' +
+      '<p class="rt-tip">点输入框照着打 · <kbd>Enter</kbd> 下一空 · <kbd>Esc</kbd> 退出后 <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 评分</p>' +
+    '</div>';
+  }
+
   function answerHTML(q) {
     let h = '';
     if (q.type === 'single') {
@@ -99,8 +123,12 @@ const Recite = (() => {
       '</div>';
     } else if (q.type === 'blank') {
       h += '<div class="rc-blanks">' + (q.blanks || []).map((b, i) =>
-        '<div class="rc-blank"><span>第 ' + (i + 1) + ' 空</span><b>' + esc(b) + '</b></div>'
+        '<div class="rc-blank" data-blank="' + i + '">' +
+          '<span>第 ' + (i + 1) + ' 空</span>' +
+          '<b data-ref="' + i + '">' + esc(b) + '</b>' +
+        '</div>'
       ).join('') + '</div>';
+      h += typeBoxHTML(q);
     } else {
       h += '<div class="rc-text">' + esc(q.answerText || '（本题暂无参考答案）') + '</div>';
     }
@@ -154,7 +182,76 @@ const Recite = (() => {
 
     $('rcStem').innerHTML = stemHTML(q);
     $('rcAnswer').innerHTML = answerHTML(q);
+    mountTypeRefs();
     updateMeta();
+  }
+
+  /* ---------------- 填空打字（照着答案逐字核对） ---------------- */
+  function mountTypeRefs() {
+    st.cells = [];
+    qsa('#rcAnswer [data-ref]').forEach((b, i) => {
+      const ref = b.textContent || '';
+      b.innerHTML = '';
+      const cells = [];
+      for (const ch of ref) {
+        const s = document.createElement('span');
+        s.textContent = ch;
+        b.appendChild(s);
+        cells.push(s);
+      }
+      st.cells.push({
+        ref: ref,
+        cells: cells,
+        input: document.querySelector('#rcAnswer .rt-in[data-in="' + i + '"]'),
+        row: b.closest('.rc-blank')
+      });
+    });
+    qsa('#rcAnswer .rt-mark').forEach(m => { m.textContent = ''; });
+    paintStat();
+  }
+
+  function paintType(i) {
+    const c = st.cells[i];
+    if (!c || !c.input) return;
+    const val = c.input.value.trim();
+    for (let k = 0; k < c.cells.length; k++) {
+      let cls = '';
+      if (k < val.length) {
+        cls = val[k] === c.ref[k] ? 'ok' : 'bad';
+      } else if (k === val.length && val.length) {
+        cls = 'cur';
+      }
+      if (c.cells[k].className !== cls) c.cells[k].className = cls;
+    }
+    const mark = c.input.parentElement.querySelector('.rt-mark');
+    if (mark) {
+      if (val === c.ref && val) mark.textContent = '✓';
+      else if (val.length > c.ref.length) mark.textContent = '+' + (val.length - c.ref.length);
+      else mark.textContent = '';
+    }
+  }
+
+  function paintStat() {
+    const n = st.cells.length;
+    if (!n) return;
+    let done = 0;
+    st.cells.forEach(c => {
+      const v = c.input ? c.input.value.trim() : '';
+      const full = !!v && v === c.ref;
+      if (full) done++;
+      if (c.row) c.row.classList.toggle('done', full);
+    });
+    const el = $('rtStat');
+    if (el) {
+      el.textContent = done + ' / ' + n + (done === n ? '　全对' : '');
+      el.classList.toggle('all', done === n);
+    }
+  }
+
+  function resetType() {
+    st.cells.forEach(c => { if (c.input) c.input.value = ''; });
+    mountTypeRefs();
+    if (window.__SSQ__ && window.__SSQ__.toast) window.__SSQ__.toast('已清空，重打一遍');
   }
 
   function updateMeta() {
@@ -323,6 +420,36 @@ const Recite = (() => {
     $('rcGrade').addEventListener('click', e => {
       const b = e.target.closest('[data-g]');
       if (b) grade(b.dataset.g);
+    });
+
+    // 填空打字区（事件委托，题目切换时无需重新绑定）
+    const ansBox = $('rcAnswer');
+    ansBox.addEventListener('input', e => {
+      const t = e.target;
+      if (!t.classList || !t.classList.contains('rt-in')) return;
+      paintType(+t.dataset.in);
+      paintStat();
+    });
+    ansBox.addEventListener('keydown', e => {
+      const t = e.target;
+      if (!t.classList || !t.classList.contains('rt-in')) return;
+      if (e.key === 'Escape') { e.preventDefault(); t.blur(); return; }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const nx = ansBox.querySelector('.rt-in[data-in="' + (+t.dataset.in + 1) + '"]');
+        if (nx) { nx.focus(); nx.select(); } else t.blur();
+      }
+    });
+    ansBox.addEventListener('paste', e => {
+      const t = e.target;
+      if (!t.classList || !t.classList.contains('rt-in')) return;
+      e.preventDefault();
+      if (window.__SSQ__ && window.__SSQ__.toast) {
+        window.__SSQ__.toast('照着打不要粘贴，自己敲一遍才记得牢');
+      }
+    });
+    ansBox.addEventListener('click', e => {
+      if (e.target.closest('[data-rt="reset"]')) resetType();
     });
 
     $('rcDone').addEventListener('click', e => {

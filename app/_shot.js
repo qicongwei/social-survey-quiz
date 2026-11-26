@@ -279,6 +279,23 @@ app.whenReady().then(async () => {
   `);
   await sleep(300);
   await shot('29-dark-recite');
+
+  // 深色下的填空打字区
+  await win.webContents.executeJavaScript(`document.querySelector('#reciteChips [data-type="blank"]').click(); true`);
+  await sleep(320);
+  await win.webContents.executeJavaScript(`(function(){
+    const q = window.__SSQ__.Bank.byId[window.Recite.state.order[0]];
+    const ins = document.querySelector('#rcAnswer .rt-in');
+    if (ins && q && q.blanks && q.blanks[0]) {
+      ins.value = q.blanks[0];
+      ins.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    return true;
+  })()`);
+  await sleep(220);
+  await shot('34-dark-recite-type');
+  await win.webContents.executeJavaScript(`document.querySelector('#reciteChips [data-type="all"]').click(); true`);
+  await sleep(200);
   await win.webContents.executeJavaScript(`document.querySelector('[data-view="practice"]').click(); true`);
   await sleep(300);
 
@@ -532,6 +549,74 @@ app.whenReady().then(async () => {
     return { queue: st.order.length, pos: st.pos, doneHidden: document.getElementById('rcDone').hidden };
   })()`);
   console.log('RECITE_RETRY_FAILED:' + JSON.stringify(rc6));
+
+  // ---------- 背题 · 填空照着答案打字 ----------
+  await win.webContents.executeJavaScript(`document.querySelector('#reciteChips [data-type="blank"]').click(); true`);
+  await sleep(350);
+  const rtb1 = await win.webContents.executeJavaScript(`(function(){
+    const st = window.Recite.state;
+    const q = window.__SSQ__.Bank.byId[st.order[st.pos]];
+    return {
+      id: q.id,
+      blanks: (q.blanks||[]).length,
+      boxShown: !!document.getElementById('rcTypeBox'),
+      inputs: document.querySelectorAll('#rcAnswer .rt-in').length,
+      refs: document.querySelectorAll('#rcAnswer [data-ref]').length,
+      cellSpans: document.querySelectorAll('#rcAnswer [data-ref] span').length,
+      stat: (document.getElementById('rtStat').textContent||'').trim()
+    };
+  })()`);
+  console.log('RECITE_TYPE_MOUNT:' + JSON.stringify(rtb1));
+
+  const rtb2 = await win.webContents.executeJavaScript(`(function(){
+    const st = window.Recite.state;
+    const q = window.__SSQ__.Bank.byId[st.order[st.pos]];
+    const ins = Array.from(document.querySelectorAll('#rcAnswer .rt-in'));
+    const ref = q.blanks[0];
+    const pick = function(c){ return document.querySelectorAll('#rcAnswer [data-ref="0"] span.' + c).length; };
+    ins[0].value = ref.charAt(0) + '错';
+    ins[0].dispatchEvent(new Event('input', { bubbles: true }));
+    const bad = { badOnWrong: pick('bad'), okOnWrong: pick('ok') };
+    ins[0].value = ref;
+    ins[0].dispatchEvent(new Event('input', { bubbles: true }));
+    return Object.assign(bad, {
+      okOnRight: pick('ok'),
+      badOnRight: pick('bad'),
+      rowDone: document.querySelectorAll('#rcAnswer .rc-blank.done').length,
+      mark: (document.querySelector('#rcAnswer .rt-mark')||{}).textContent,
+      stat: (document.getElementById('rtStat').textContent||'').trim(),
+      statAll: document.getElementById('rtStat').classList.contains('all')
+    });
+  })()`);
+  console.log('RECITE_TYPE_MATCH:' + JSON.stringify(rtb2));
+  await shot('33-recite-type');
+
+  const rtb3 = await win.webContents.executeJavaScript(`(function(){
+    document.querySelector('#rcAnswer [data-rt="reset"]').click();
+    const ins = Array.from(document.querySelectorAll('#rcAnswer .rt-in'));
+    return {
+      emptied: ins.every(function(i){ return i.value === ''; }),
+      doneRows: document.querySelectorAll('#rcAnswer .rc-blank.done').length,
+      marks: Array.from(document.querySelectorAll('#rcAnswer .rt-mark')).filter(function(m){return m.textContent;}).length,
+      stat: (document.getElementById('rtStat').textContent||'').trim()
+    };
+  })()`);
+  console.log('RECITE_TYPE_RESET:' + JSON.stringify(rtb3));
+
+  // 多空填空题排版
+  const rtb4 = await win.webContents.executeJavaScript(`(function(){
+    const st = window.Recite.state;
+    st.pos = 1;
+    window.Recite.refresh();
+    const q = window.__SSQ__.Bank.byId[st.order[st.pos]];
+    return { id: q.id, blanks: (q.blanks||[]).length,
+             inputs: document.querySelectorAll('#rcAnswer .rt-in').length,
+             nos: document.querySelectorAll('#rcAnswer .rt-no').length,
+             stat: (document.getElementById('rtStat').textContent||'').trim() };
+  })()`);
+  console.log('RECITE_TYPE_MULTI:' + JSON.stringify(rtb4));
+  await shot('35-recite-type-multi');
+
   await win.webContents.executeJavaScript(`window.Recite.build(); true`);
 
   // ---------- 练习节奏：答对自动跳 / 答错手动 / 顺序乱序 / 加练去重 / 错题强化 ----------

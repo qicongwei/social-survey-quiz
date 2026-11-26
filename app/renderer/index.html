@@ -53,7 +53,8 @@
         </div>
         <select id="chapterSelect" class="chapter-select" hidden title="按章节练习"></select>
         <button class="ghost-btn" id="btnStarMode" title="只练收藏的题">☆ 收藏</button>
-        <button class="ghost-btn" id="btnWrongMode" title="只练做错过的题">错题强化</button>
+        <button class="ghost-btn" id="btnWrongMode" title="只练做错过的题，需连续答对 2 次才算过">错题强化</button>
+        <button class="ghost-btn" id="btnOrder" title="切换练习顺序">顺序</button>
       </div>
 
       <div class="progress-line">
@@ -411,6 +412,10 @@
         <div class="setting-row">
           <div><label>答错后当日重现</label><small>答错的题在本轮末尾再出现一次</small></div>
           <label class="switch"><input type="checkbox" id="setRequeue"><i></i></label>
+        </div>
+        <div class="setting-row">
+          <div><label>答对自动下一题</label><small>答对后停顿 0.8 秒自动跳转；答错不跳，留时间看正确答案</small></div>
+          <label class="switch"><input type="checkbox" id="setAutoNext"><i></i></label>
         </div>
       </div>
 

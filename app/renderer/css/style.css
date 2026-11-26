@@ -351,6 +351,14 @@ kbd{
 .primary-btn:hover{background:var(--brand-2);transform:translateY(-1px)}
 .primary-btn:active{transform:none}
 .primary-btn.big{padding:12px 28px}
+/* 答对后自动跳题的等待条：0.8s 内从左走到右 */
+#btnNext[data-auto]{position:relative;overflow:hidden}
+#btnNext[data-auto]::after{
+  content:'';position:absolute;left:0;bottom:0;height:3px;width:100%;
+  background:rgba(255,255,255,.6);transform-origin:left;
+  animation:autonext .8s linear forwards;
+}
+@keyframes autonext{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 .primary-btn kbd{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3);color:#fff;margin-left:6px}
 .primary-btn:disabled{background:var(--btn-off);box-shadow:none;cursor:not-allowed;transform:none}
 

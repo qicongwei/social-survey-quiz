@@ -534,6 +534,137 @@ app.whenReady().then(async () => {
   console.log('RECITE_RETRY_FAILED:' + JSON.stringify(rc6));
   await win.webContents.executeJavaScript(`window.Recite.build(); true`);
 
+  // ---------- 练习节奏：答对自动跳 / 答错手动 / 顺序乱序 / 加练去重 / 错题强化 ----------
+  const orderChk = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__;
+    document.querySelector('[data-view="practice"]').click();
+    A.startSession('single', {});
+    const a = A.App.session.queue.slice();
+    document.getElementById('btnOrder').click();
+    const b = A.App.session.queue.slice();
+    const on = { shufOn: document.getElementById('btnOrder').classList.contains('on'),
+                 label: document.getElementById('btnOrder').textContent };
+    document.getElementById('btnOrder').click();
+    const c = A.App.session.queue.slice();
+    return { n: a.length, shuffled: a.join('|') !== b.join('|'),
+             seqRestored: c.join('|') === a.join('|'),
+             shufOn: on.shufOn, labelOn: on.label,
+             labelOff: document.getElementById('btnOrder').textContent };
+  })()`);
+  console.log('ORDER:' + JSON.stringify(orderChk));
+
+  const auto1 = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__;
+    A.startSession('single', {});
+    const App = A.App;
+    const q = App.current;
+    const key = q.answer;
+    document.querySelector('#answerArea .opt[data-k="' + key + '"]').click();
+    return { id: q.id, pos: App.session.pos,
+             autoAttr: document.getElementById('btnNext').hasAttribute('data-auto'),
+             btnShown: !document.getElementById('btnNext').hidden,
+             fb: document.getElementById('feedback').textContent.replace(/\\s+/g,' ').slice(0,40) };
+  })()`);
+  await shot('32-auto-next');
+  await sleep(1200);
+  const auto2 = await win.webContents.executeJavaScript(`(function(){
+    const App = window.__SSQ__.App;
+    return { cur: App.current.id, pos: App.session.pos, answered: App.answered };
+  })()`);
+  console.log('AUTO_NEXT:' + JSON.stringify({ before: auto1, after: auto2,
+    advanced: auto1.id !== auto2.cur }));
+
+  const manual1 = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__;
+    A.startSession('single', {});
+    const App = A.App;
+    const q = App.current;
+    const bad = 'ABCD'.split('').filter(function(k){ return k !== q.answer; })[0];
+    document.querySelector('#answerArea .opt[data-k="' + bad + '"]').click();
+    return { id: q.id, autoAttr: document.getElementById('btnNext').hasAttribute('data-auto'),
+             btnShown: !document.getElementById('btnNext').hidden };
+  })()`);
+  await sleep(1200);
+  const manual2 = await win.webContents.executeJavaScript(`(function(){
+    const App = window.__SSQ__.App;
+    return { cur: App.current.id, pos: App.session.pos, answered: App.answered };
+  })()`);
+  console.log('MANUAL_NEXT:' + JSON.stringify({ before: manual1, after: manual2,
+    stayed: manual1.id === manual2.cur }));
+
+  const extraChk = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__;
+    A.startSession('single', {});
+    const App = A.App;
+    const firstId = App.session.queue[0];
+    App.session.queue = [firstId];
+    App.session.pos = 0;
+    A.nextQuestion();
+    A.nextQuestion();               // 队列只有 1 题，直接进结算态
+    const seen = Array.from(App.seen);
+    const emptyShown = !document.getElementById('emptyState').hidden;
+    document.getElementById('btnExtra').click();
+    return { firstId: firstId, seen: seen, emptyShown: emptyShown,
+             extraLen: App.session.queue.length, dup: App.session.queue.indexOf(firstId) >= 0,
+             extraFlag: !!App.session.extra,
+             label: document.getElementById('plLabel').textContent };
+  })()`);
+  console.log('EXTRA_DEDUP:' + JSON.stringify(extraChk));
+
+  // 题都练完后再点加练：应重置 seen 并重新给题，而不是空队列
+  const extraAgain = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__; const App = A.App;
+    App.seen = new Set(A.Bank.all.filter(function(q){ return q.type === 'single'; }).map(function(q){ return q.id; }));
+    App.session.queue = []; App.session.pos = 0;
+    A.nextQuestion();
+    document.getElementById('btnExtra').click();
+    return { len: App.session.queue.length, dedupPool: App.session.queue.length > 0 };
+  })()`);
+  console.log('EXTRA_RESET:' + JSON.stringify(extraAgain));
+
+  const wrongMode1 = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__;
+    A.startSession('single', {});
+    const App = A.App;
+    const q = App.current;
+    const bad = 'ABCD'.split('').filter(function(k){ return k !== q.answer; })[0];
+    document.querySelector('#answerArea .opt[data-k="' + bad + '"]').click();
+    document.getElementById('btnWrongMode').click();
+    return { id: q.id, wrongMode: App.wrongMode,
+             inQueue: App.session.queue.indexOf(q.id) >= 0,
+             queueLen: App.session.queue.length,
+             label: document.getElementById('plLabel').textContent,
+             num: document.getElementById('plNum').textContent };
+  })()`);
+  await shot('30-wrong-mode');
+  console.log('WRONG_MODE:' + JSON.stringify(wrongMode1));
+
+  const strong1 = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__; const App = A.App;
+    App.session.queue = [App.session.queue[0]];
+    App.session.pos = 0;
+    A.nextQuestion();
+    const q = App.current;
+    document.querySelector('#answerArea .opt[data-k="' + q.answer + '"]').click();
+    return { id: q.id, queueLen: App.session.queue.length, streak: App.wrongStreak[q.id] || 0 };
+  })()`);
+  await sleep(1200);
+  const strong2 = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__; const App = A.App;
+    const same = App.current && App.current.id;
+    document.querySelector('#answerArea .opt[data-k="' + App.current.answer + '"]').click();
+    return { revisit: same, streak: App.wrongStreak[same] || 0, queueLen: App.session.queue.length };
+  })()`);
+  await sleep(1200);
+  const strong3 = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__; const App = A.App;
+    return { emptyShown: !document.getElementById('emptyState').hidden,
+             num: document.getElementById('plNum').textContent,
+             headline: document.querySelector('#emptyState h3').textContent };
+  })()`);
+  console.log('WRONG_STRONG:' + JSON.stringify({ first: strong1, second: strong2, done: strong3 }));
+  await shot('31-wrong-done');
+
   // ---------- 统计（含热力图） ----------
   await win.webContents.executeJavaScript(`document.querySelector('[data-view="stats"]').click(); true`);
   await sleep(500);

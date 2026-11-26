@@ -25,12 +25,40 @@
     current: null,
     answered: false,
     requeue: {},
-    goalHit: ''
+    goalHit: '',
+    autoTimer: null,      // 答对后自动跳题的计时器
+    seen: null,           // 本次会话已出现过的题 id，加练时不重复
+    wrongStreak: {}       // 错题强化：当前连续答对次数
   };
+
+  const AUTO_NEXT_DELAY = 800;   // 答对后停顿，留一点时间看结果
+  const WRONG_PASS_NEED = 2;     // 错题强化：连续答对几次才算过
+  const REQUEUE_MAX = 3;         // 同一题在本轮最多重现几次，防止无限循环
 
   /* ---------------- 工具 ---------------- */
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function autoNextOn() {
+    return !Store.state || Store.state.settings.autoNext !== false;
+  }
+
+  function shuffleOn() {
+    return !!(Store.state && Store.state.settings.shuffle);
+  }
+
+  function shuffledArr(a) {
+    const r = a.slice();
+    for (let i = r.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = r[i]; r[i] = r[j]; r[j] = t;
+    }
+    return r;
+  }
+
+  function clearAuto() {
+    if (App.autoTimer) { clearTimeout(App.autoTimer); App.autoTimer = null; }
   }
 
   let toastTimer = null;
@@ -118,6 +146,7 @@
     opts = opts || {};
     const today = Scheduler.todayStr();
     const st = Store.state;
+    const shuf = opts.shuffle != null ? opts.shuffle : shuffleOn();
     const pool = Bank.all.filter(q =>
       (type === 'all' || q.type === type) && (!opts.chapter || q.chapter === opts.chapter));
 
@@ -126,7 +155,8 @@
         const s = Store.peek(q.id);
         return s && (s.wrong || 0) > 0 && !Scheduler.isMastered(s);
       });
-      arr.sort((a, b) => (Store.peek(b.id).wrong || 0) - (Store.peek(a.id).wrong || 0));
+      if (shuf) return shuffledArr(arr).map(q => q.id);
+      arr.sort((a, b) => (Store.peek(b.id).wrong || 0) - (Store.peek(a.id).wrong || 0) || a.no - b.no);
       return arr.map(q => q.id);
     }
 
@@ -135,6 +165,7 @@
         const s = Store.peek(q.id);
         return s && s.star;
       });
+      if (shuf) return shuffledArr(arr).map(q => q.id);
       // 收藏夹内按到期优先，未到期按题号
       arr.sort((a, b) => {
         const sa = Store.peek(a.id), sb = Store.peek(b.id);
@@ -164,20 +195,43 @@
     const subFresh = freshSel.filter(q => q.type === 'short' || q.type === 'prac');
     const freshOrdered = roundRobinByType(objFresh).concat(roundRobinByType(subFresh));
 
-    return interleave(dueSel, freshOrdered, 2).map(q => q.id);
+    const out = interleave(dueSel, freshOrdered, 2);
+    return (shuf ? shuffledArr(out) : out).map(q => q.id);
+  }
+
+  /** 按当前工具栏状态重建本轮练习（切换顺序、进出错题/收藏模式都走这里） */
+  function replay(mut) {
+    const opts = { chapter: App.chapter, wrongOnly: App.wrongMode, starOnly: App.starMode };
+    if (mut) mut(opts);
+    startSession(App.filter, opts);
+  }
+
+  function syncToolbar() {
+    qsa('#typeChips .chip').forEach(c => c.classList.toggle('is-on', c.dataset.type === App.filter));
+    qs('#btnWrongMode').classList.toggle('on', App.wrongMode);
+    qs('#btnStarMode').classList.toggle('on', App.starMode);
+    const ob = qs('#btnOrder');
+    if (ob) {
+      const sh = shuffleOn();
+      ob.textContent = sh ? '乱序' : '顺序';
+      ob.classList.toggle('on', sh);
+      ob.title = sh ? '当前：乱序练习（点击改为按顺序）' : '当前：按顺序练习（点击改为乱序）';
+    }
   }
 
   function startSession(type, opts) {
+    opts = opts || {};
     App.filter = type;
-    App.wrongMode = !!(opts && opts.wrongOnly);
-    App.starMode = !!(opts && opts.starOnly);
-    App.chapter = (opts && opts.chapter) || '';
-    const ids = buildQueue(type, opts || {});
-    App.session = { queue: ids, pos: 0, initial: ids.length };
+    App.wrongMode = !!opts.wrongOnly;
+    App.starMode = !!opts.starOnly;
+    App.chapter = opts.chapter || '';
+    const ids = buildQueue(type, opts);
+    App.session = { queue: ids, pos: 0, initial: ids.length, extra: !!opts.extra };
     App.requeue = {};
-    qsa('#typeChips .chip').forEach(c => c.classList.toggle('is-on', c.dataset.type === type));
-    qs('#btnWrongMode').classList.toggle('on', App.wrongMode);
-    qs('#btnStarMode').classList.toggle('on', App.starMode);
+    App.wrongStreak = {};
+    App.seen = new Set();
+    clearAuto();
+    syncToolbar();
     updateChapterUI();
     updateProgressLine();
     nextQuestion();
@@ -203,10 +257,16 @@
   function nextQuestion() {
     const s = App.session;
     if (!s) return;
+    clearAuto();
     while (s.pos < s.queue.length) {
       const id = s.queue[s.pos++];
       const q = Bank.byId[id];
-      if (q) { renderQuestion(q); return; }
+      if (q) {
+        if (!App.seen) App.seen = new Set();
+        App.seen.add(id);
+        renderQuestion(q);
+        return;
+      }
     }
     renderEmpty();
   }
@@ -223,13 +283,18 @@
     if (App.starMode) {
       h3.textContent = '收藏夹里没有题目';
       p.textContent = '练习或题库页点击题目右上角的 ☆ 收藏，之后就能在这里单独复习。';
+    } else if (App.wrongMode) {
+      h3.textContent = '本轮错题强化完成';
+      p.textContent = '每道错题都连续答对 ' + WRONG_PASS_NEED + ' 次才算过。可以再来一组，或回普通练习继续推进度。';
     } else {
       h3.textContent = allFresh ? '这个题型已经练完一轮' : '今天的任务已完成';
       p.textContent = allFresh
         ? '该范围没有剩余新题，可切换题型或继续巩固错题。'
         : '没有到期需要复习的题目了。可以切换题型，或额外加练 10 道。';
     }
-    qs('#btnExtra').hidden = App.starMode;
+    const extra = qs('#btnExtra');
+    extra.hidden = App.starMode;
+    extra.textContent = App.wrongMode ? '再练 10 道错题' : '再来 10 题';
     updateProgressLine();
   }
 
@@ -410,9 +475,29 @@
     f.hidden = false;
   }
 
-  function markNext() {
-    qs('#btnNext').hidden = false;
+  /** 答对自动跳下一题（留 AUTO_NEXT_DELAY 的停顿）；答错只亮出按钮，等用户自己翻 */
+  function markNext(correct) {
+    const btn = qs('#btnNext');
+    btn.hidden = false;
     qs('#hint').hidden = true;
+    clearAuto();
+    const auto = !!correct && autoNextOn();
+    if (auto) btn.dataset.auto = '1';
+    else btn.removeAttribute('data-auto');
+    if (auto) {
+      btn.title = '答对了，' + (AUTO_NEXT_DELAY / 1000) + ' 秒后自动进入下一题（也可立即点击）';
+      App.autoTimer = setTimeout(() => {
+        App.autoTimer = null;
+        nextQuestion();
+      }, AUTO_NEXT_DELAY);
+    } else {
+      btn.title = '';
+    }
+  }
+
+  function autoTip(tail) {
+    if (!autoNextOn()) return tail || '';
+    return '稍后自动进入下一题';
   }
 
   function answerSingle(key) {
@@ -428,10 +513,10 @@
       else if (k === key) el.classList.add('wrong');
     });
     const ansText = (q.options.find(o => o.key === q.answer) || {}).text || '';
-    if (correct) showFeedback(true, '答对了　<span style="opacity:.75">已按间隔重复安排下次复习</span>');
+    if (correct) showFeedback(true, '答对了　<span style="opacity:.75">' + autoTip('已按间隔重复安排下次复习') + '</span>');
     else showFeedback(false, '答错了　正确答案是 <b>' + esc(q.answer) + '．' + esc(ansText) + '</b>');
     record(q, correct ? 4 : 0, correct);
-    markNext();
+    markNext(correct);
   }
 
   function answerJudge(val) {
@@ -445,10 +530,10 @@
       if (v === q.answer) el.classList.add('right');
       if (v === val && !correct) { el.classList.remove('right'); el.classList.add('wrong'); }
     });
-    if (correct) showFeedback(true, '判断正确');
+    if (correct) showFeedback(true, '判断正确' + (autoNextOn() ? '　<span style="opacity:.75">' + autoTip('') + '</span>' : ''));
     else showFeedback(false, '判断错误　正确答案是 <b>' + (q.answer === '√' ? '√ 正确' : '× 错误') + '</b>');
     record(q, correct ? 4 : 0, correct);
-    markNext();
+    markNext(correct);
   }
 
   function submitBlank() {
@@ -475,12 +560,13 @@
     const std = q.blanks.map((b, i) => '第' + (i + 1) + '空 ' + b).join('；');
     if (allOk) {
       showFeedback(true, '全部填对' + (anyClose ? '（有一处表述略有差异，已计为正确）' : '') +
+        (autoNextOn() ? '　<span style="opacity:.75">稍后自动进入下一题</span>' : '') +
         (q.blanks.length > 1 ? '　参考答案：<b>' + esc(std) + '</b>' : ''));
     } else {
       showFeedback(false, '参考答案：<b>' + esc(std) + '</b>');
     }
     record(q, allOk ? 4 : 0, allOk);
-    markNext();
+    markNext(allOk);
   }
 
   /** 把长答案切成可逐句遮盖的片段：先按行，过长再按句号/分号 */
@@ -623,9 +709,10 @@
     const v = parseInt(g, 10);
     qsa('#selfGrade .sg').forEach(b => { b.disabled = true; });
     const label = v >= 4 ? '已记为掌握，下次间隔延长' : (v === 3 ? '已记为模糊，明天再复习' : '已记为不会，稍后再出现');
-    showFeedback(v >= 4, '自评：' + (v >= 4 ? '掌握' : v === 3 ? '模糊' : '不会') + '　<span style="opacity:.75">' + label + '</span>');
+    showFeedback(v >= 4, '自评：' + (v >= 4 ? '掌握' : v === 3 ? '模糊' : '不会') + '　<span style="opacity:.75">' +
+      (v >= 4 ? autoTip(label) : label) + '</span>');
     record(q, v, v >= 4);
-    markNext();
+    markNext(v >= 4);
   }
 
   function record(q, quality, isCorrect) {
@@ -647,7 +734,15 @@
     updateStreak();
     Store.save();
 
-    if (quality < 4 && st.settings.requeue) {
+    if (App.wrongMode && App.session) {
+      // 错题强化：连续答对 WRONG_PASS_NEED 次才移出本轮；答错清零，重排到队尾再考
+      const n = isCorrect ? (App.wrongStreak[q.id] || 0) + 1 : 0;
+      App.wrongStreak[q.id] = n;
+      App.requeue[q.id] = (App.requeue[q.id] || 0) + 1;
+      if ((!isCorrect || n < WRONG_PASS_NEED) && App.requeue[q.id] <= REQUEUE_MAX) {
+        App.session.queue.push(q.id);
+      }
+    } else if (quality < 4 && st.settings.requeue) {
       App.requeue[q.id] = (App.requeue[q.id] || 0) + 1;
       if (App.requeue[q.id] <= 1 && App.session) {
         App.session.queue.push(q.id);
@@ -753,6 +848,21 @@
     const s = App.session;
     const day = Store.state.daily[Scheduler.todayStr()] || { answered: 0 };
     const remain = s ? Math.max(0, s.queue.length - s.pos) : 0;
+
+    const label = qs('#plLabel');
+    if (label) {
+      label.textContent = App.wrongMode ? '错题强化' : App.starMode ? '收藏练习'
+        : (s && s.extra ? '额外加练' : '今日进度');
+    }
+
+    // 错题强化的队列会因为「没过关」变长，进度按「已过 / 当前队列」算
+    if (App.wrongMode) {
+      qs('#plNum').textContent = remain ? '剩余 ' + remain + ' 题' : '本轮完成';
+      const len = s ? s.queue.length : 0;
+      qs('#plBar').style.width = len ? Math.min(100, ((len - remain) / len) * 100) + '%' : '0%';
+      return;
+    }
+
     const done = day.answered || 0;
     const total = done + remain;
     qs('#plNum').textContent = done + ' / ' + total;
@@ -861,10 +971,11 @@
     App.wrongMode = false;
     App.starMode = false;
     App.requeue = {};
+    App.wrongStreak = {};
+    App.seen = new Set([id]);
+    clearAuto();
     App.session = { queue: [id], pos: 1, initial: 1 };
-    qsa('#typeChips .chip').forEach(c => c.classList.toggle('is-on', c.dataset.type === q.type));
-    qs('#btnWrongMode').classList.remove('on');
-    qs('#btnStarMode').classList.remove('on');
+    syncToolbar();
     updateChapterUI();
     switchView('practice');
     renderQuestion(q);
@@ -1028,6 +1139,7 @@
     qs('#setNew').value = s.newPerDay;
     qs('#setReview').value = s.reviewPerDay;
     qs('#setRequeue').checked = !!s.requeue;
+    qs('#setAutoNext').checked = s.autoNext !== false;
     qs('#setGoal').value = s.dailyGoal || 50;
     applyTheme(s.theme || 'light', false);
   }
@@ -1047,6 +1159,11 @@
       Store.state.settings.requeue = e.target.checked;
       Store.save(true);
       toast(e.target.checked ? '答错后当日重现：开' : '答错后当日重现：关');
+    });
+    qs('#setAutoNext').addEventListener('change', e => {
+      Store.state.settings.autoNext = e.target.checked;
+      Store.save(true);
+      toast(e.target.checked ? '答对自动下一题：开（停顿 0.8 秒）' : '答对自动下一题：关');
     });
 
     qs('#setGoal').addEventListener('change', e => {
@@ -1158,6 +1275,7 @@
 
   function switchView(v) {
     App.view = v;
+    if (v !== 'practice') clearAuto();
     qsa('#tabs .tab').forEach(b => b.classList.toggle('is-active', b.dataset.view === v));
     ['practice', 'recite', 'typing', 'exam', 'browse', 'stats', 'settings'].forEach(k => {
       qs('#view-' + k).hidden = k !== v;
@@ -1172,22 +1290,32 @@
     qs('#typeChips').addEventListener('click', e => {
       const b = e.target.closest('.chip');
       if (!b) return;
-      const ch = b.dataset.type === 'short' ? App.chapter : '';
-      startSession(b.dataset.type, { chapter: ch });
+      const type = b.dataset.type;
+      const ch = type === 'short' ? App.chapter : '';
+      startSession(type, { chapter: ch, wrongOnly: App.wrongMode, starOnly: App.starMode });
     });
 
     qs('#chapterSelect').addEventListener('change', e => {
-      startSession('short', { chapter: e.target.value });
+      startSession('short', {
+        chapter: e.target.value, wrongOnly: App.wrongMode, starOnly: App.starMode
+      });
     });
 
     qs('#btnWrongMode').addEventListener('click', () => {
-      if (App.wrongMode) startSession(App.filter, {});
-      else startSession(App.filter, { wrongOnly: true });
+      replay(o => { o.wrongOnly = !App.wrongMode; });
     });
 
     qs('#btnStarMode').addEventListener('click', () => {
-      if (App.starMode) startSession(App.filter, {});
-      else startSession(App.filter, { starOnly: true });
+      replay(o => { o.starOnly = !App.starMode; });
+    });
+
+    // 顺序 / 乱序：全局偏好，落在 settings.shuffle，所有练习模式共用
+    qs('#btnOrder').addEventListener('click', () => {
+      const sh = !shuffleOn();
+      Store.state.settings.shuffle = sh;
+      Store.save();
+      replay();
+      toast(sh ? '已切换为乱序练习' : '已切换为按顺序练习');
     });
 
     // 笔记
@@ -1210,12 +1338,48 @@
 
     qs('#btnNext').addEventListener('click', () => nextQuestion());
 
+    // 额外加练：只从本轮还没出现过的题里挑，避免和刚练完的重复
     qs('#btnExtra').addEventListener('click', () => {
-      const ids = Bank.all.filter(q => App.filter === 'all' || q.type === App.filter)
-        .map(q => q.id).sort(() => Math.random() - 0.5).slice(0, 10);
-      App.session = { queue: ids, pos: 0, initial: ids.length };
+      const inScope = q => (App.filter === 'all' || q.type === App.filter) &&
+        (!App.chapter || q.chapter === App.chapter);
+      const inMode = q => {
+        if (App.wrongMode) {
+          const s = Store.peek(q.id);
+          return !!s && (s.wrong || 0) > 0 && !Scheduler.isMastered(s);
+        }
+        if (App.starMode) {
+          const s = Store.peek(q.id);
+          return !!s && !!s.star;
+        }
+        return true;
+      };
+      const collect = () => {
+        const seen = App.seen || new Set();
+        return Bank.all.filter(q => inScope(q) && inMode(q) && !seen.has(q.id));
+      };
+
+      let pool = collect();
+      let rested = false;
+      if (!pool.length) {
+        // 本范围内的题都练过了，才允许从头再来
+        App.seen = new Set();
+        pool = collect();
+        rested = true;
+      }
+      if (!pool.length) {
+        toast(App.wrongMode ? '没有可强化的错题了' : '这个范围没有可加练的题');
+        return;
+      }
+
+      const ids = (shuffleOn() ? shuffledArr(pool) : pool).slice(0, 10).map(q => q.id);
+      clearAuto();
+      App.session = { queue: ids, pos: 0, initial: ids.length, extra: true };
       App.requeue = {};
+      App.wrongStreak = {};
+      updateProgressLine();
       nextQuestion();
+      toast(rested ? '本范围已全部练过，重新开始'
+        : '加练 ' + ids.length + ' 题' + (shuffleOn() ? '（乱序）' : '（顺序）'));
     });
 
     qs('#btnStar').addEventListener('click', () => {

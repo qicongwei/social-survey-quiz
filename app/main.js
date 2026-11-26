@@ -35,7 +35,7 @@ function createWindow() {
       setTimeout(async () => {
         try {
           const r = await win.webContents.executeJavaScript(
-            "JSON.stringify({questions: window.QUESTION_BANK.questions.length, opts: document.querySelectorAll('#answerArea .opt').length, api: !!window.desktopAPI, typing: !!window.Typing, exam: !!window.Exam, recite: !!window.Recite, views: document.querySelectorAll('.view').length, theme: document.documentElement.dataset.theme, themeMode: document.documentElement.dataset.themeMode, note: !!document.querySelector('#noteInput'), sheet: !!document.querySelector('#esGrid'), star: !!document.querySelector('#btnStarMode'), goal: document.querySelector('#tsGoal').textContent, version: '" + app.getVersion() + "'})"
+            "JSON.stringify({questions: window.QUESTION_BANK.questions.length, opts: document.querySelectorAll('#answerArea .opt').length, ctrls: document.querySelectorAll('#answerArea [data-act]').length, qType: (document.querySelector('#qType')||{}).textContent, order: (document.querySelector('#btnOrder')||{}).textContent, autoNext: !!(Store.state.settings.autoNext !== false), api: !!window.desktopAPI, typing: !!window.Typing, exam: !!window.Exam, recite: !!window.Recite, views: document.querySelectorAll('.view').length, theme: document.documentElement.dataset.theme, themeMode: document.documentElement.dataset.themeMode, note: !!document.querySelector('#noteInput'), sheet: !!document.querySelector('#esGrid'), star: !!document.querySelector('#btnStarMode'), goal: document.querySelector('#tsGoal').textContent, version: '" + app.getVersion() + "'})"
           );
           fs.writeFileSync(path.join(app.getPath('userData'), 'selftest.json'), r, 'utf8');
         } catch (e) {

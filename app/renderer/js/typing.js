@@ -178,6 +178,9 @@ const Typing = (() => {
     rec.lastAt = today;
     rec.best = Math.max(rec.best || 0, sc);
     Store.state.typing[cur.id] = rec;
+    Store.state.typingLog = (Store.state.typingLog || []).concat([{
+      at: today, id: cur.id, score: sc, cpm, acc: Math.round(acc * 100)
+    }]).slice(-120);
 
     if (!Store.state.daily[today]) Store.state.daily[today] = { answered: 0, right: 0, newCount: 0 };
     Store.state.daily[today].typed = (Store.state.daily[today].typed || 0) + countChars(refText);

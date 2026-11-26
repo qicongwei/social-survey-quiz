@@ -17,6 +17,7 @@
   const App = {
     view: 'practice',
     filter: 'all',
+    chapter: '',
     wrongMode: false,
     browseType: 'all',
     session: null,
@@ -115,7 +116,8 @@
     opts = opts || {};
     const today = Scheduler.todayStr();
     const st = Store.state;
-    const pool = Bank.all.filter(q => type === 'all' || q.type === type);
+    const pool = Bank.all.filter(q =>
+      (type === 'all' || q.type === type) && (!opts.chapter || q.chapter === opts.chapter));
 
     if (opts.wrongOnly) {
       const arr = pool.filter(q => {
@@ -151,13 +153,32 @@
   function startSession(type, opts) {
     App.filter = type;
     App.wrongMode = !!(opts && opts.wrongOnly);
+    App.chapter = (opts && opts.chapter) || '';
     const ids = buildQueue(type, opts || {});
     App.session = { queue: ids, pos: 0, initial: ids.length };
     App.requeue = {};
     qsa('#typeChips .chip').forEach(c => c.classList.toggle('is-on', c.dataset.type === type));
     qs('#btnWrongMode').classList.toggle('on', App.wrongMode);
+    updateChapterUI();
     updateProgressLine();
     nextQuestion();
+  }
+
+  function updateChapterUI() {
+    const sel = qs('#chapterSelect');
+    if (!sel) return;
+    const on = App.filter === 'short';
+    sel.hidden = !on;
+    if (!on) return;
+    if (!sel.dataset.filled) {
+      const chs = Array.from(new Set(
+        Bank.all.filter(q => q.type === 'short' && q.chapter).map(q => q.chapter)
+      )).sort((a, b) => (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0));
+      sel.innerHTML = '<option value="">全部章节</option>' +
+        chs.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
+      sel.dataset.filled = '1';
+    }
+    sel.value = App.chapter || '';
   }
 
   function nextQuestion() {
@@ -428,6 +449,69 @@
     markNext();
   }
 
+  /** 把长答案切成可逐句遮盖的片段：先按行，过长再按句号/分号 */
+  function splitSegments(text) {
+    const lines = String(text || '').split(/\n+/).map(s => s.trim()).filter(Boolean);
+    const segs = [];
+    for (const line of lines) {
+      if (line.length <= 110) { segs.push(line); continue; }
+      const parts = line.split(/(?<=[。；;！？])/).map(s => s.trim()).filter(Boolean);
+      segs.push.apply(segs, parts);
+    }
+    return segs.length ? segs : [String(text || '')];
+  }
+
+  function renderSegList(container, text, tools) {
+    const segs = splitSegments(text);
+    container.className = 'ab-body seg-mode';
+    container.innerHTML = '';
+
+    const bar = document.createElement('div');
+    bar.className = 'seg-bar';
+    const cnt = document.createElement('span');
+    cnt.innerHTML = '已揭开 <b>0</b> / ' + segs.length;
+    bar.appendChild(cnt);
+    container.appendChild(bar);
+
+    const list = document.createElement('div');
+    list.className = 'seg-list';
+    segs.forEach((s, i) => {
+      const d = document.createElement('div');
+      d.className = 'seg';
+      const no = document.createElement('span');
+      no.className = 'seg-no';
+      no.textContent = String(i + 1);
+      const tx = document.createElement('span');
+      tx.className = 'seg-txt';
+      tx.textContent = s;
+      d.appendChild(no);
+      d.appendChild(tx);
+      d.addEventListener('click', () => {
+        d.classList.toggle('open');
+        sync();
+      });
+      list.appendChild(d);
+    });
+    container.appendChild(list);
+
+    let allOpen = false;
+    const allBtn = document.createElement('button');
+    allBtn.className = 'ghost-btn small-btn seg-all';
+    allBtn.textContent = '全部揭开';
+    if (tools) tools.appendChild(allBtn);
+    allBtn.addEventListener('click', () => {
+      allOpen = !allOpen;
+      qsa('.seg', list).forEach(el => el.classList.toggle('open', allOpen));
+      allBtn.textContent = allOpen ? '全部遮住' : '全部揭开';
+      sync();
+    });
+
+    function sync() {
+      const n = qsa('.seg.open', list).length;
+      cnt.innerHTML = '已揭开 <b>' + n + '</b> / ' + segs.length;
+    }
+  }
+
   function showAnswer() {
     const q = App.current;
     if (q.type !== 'short' && q.type !== 'prac') return;
@@ -439,13 +523,37 @@
     const head = document.createElement('div');
     head.className = 'ab-head';
     head.innerHTML = '<span class="lbl">参考答案</span>';
+
+    const tools = document.createElement('div');
+    tools.className = 'ab-tools';
+
+    const segBtn = document.createElement('button');
+    segBtn.className = 'ghost-btn small-btn';
+    segBtn.textContent = '逐句背';
+    segBtn.addEventListener('click', () => {
+      const on = segBtn.classList.toggle('on');
+      segBtn.textContent = on ? '看全文' : '逐句背';
+      if (on) {
+        renderSegList(body, q.answerText || '', tools);
+      } else {
+        body.className = 'ab-body';
+        body.textContent = q.answerText || '（本题暂无参考答案）';
+        const ab = tools.querySelector('.seg-all');
+        if (ab) ab.remove();
+      }
+    });
+
     const spk = document.createElement('button');
     spk.className = 'ghost-btn small-btn';
     spk.textContent = '朗读';
     spk.addEventListener('click', () => {
       if (window.__speak) window.__speak(q.stem + '。' + (q.answerText || ''));
     });
-    head.appendChild(spk);
+
+    tools.appendChild(segBtn);
+    tools.appendChild(spk);
+    head.appendChild(tools);
+
     const body = document.createElement('div');
     body.className = 'ab-body';
     body.textContent = q.answerText || '（本题暂无参考答案）';
@@ -690,6 +798,23 @@
       chart.appendChild(col);
     });
 
+    // 打字成绩趋势
+    const trend = qs('#typingTrend');
+    if (trend) {
+      const logs = (st.typingLog || []).slice(-12);
+      if (!logs.length) {
+        trend.innerHTML = '<div class="muted" style="font-size:13px">还没有打字训练记录，去「打字」页练一篇试试</div>';
+      } else {
+        trend.innerHTML = logs.map(l =>
+          '<div class="tr-col">' +
+          '<div class="tr-val">' + l.score + '</div>' +
+          '<div class="tr-wrap"><div class="tr-bar" style="height:' + Math.max(3, l.score) + '%"></div></div>' +
+          '<div class="tr-lab">' + esc((l.at || '').slice(5)) + '</div>' +
+          '</div>'
+        ).join('');
+      }
+    }
+
     // 学习热力图（最近 12 周）
     const heat = qs('#heatGrid');
     if (heat) {
@@ -768,8 +893,50 @@
       toast('进度已导出');
     });
 
-    qs('#btnImport').addEventListener('click', () => qs('#fileImport').click());
-    qs('#fileImport').addEventListener('change', async e => {
+    qs('#btnExportWrong').addEventListener('click', () => {
+      const wrong = Bank.all.filter(q => {
+        const s = Store.peek(q.id);
+        return s && (s.wrong || 0) > 0;
+      });
+      if (!wrong.length) { toast('还没有错题，先去练习吧'); return; }
+
+      const groupName = { single: '单项选择', judge: '判断题', blank: '填空题', short: '名词解释 / 简答', prac: '实操题' };
+      let md = '# 社会调查题库 · 错题本\n\n导出时间：' + Scheduler.todayStr() +
+        '　共 ' + wrong.length + ' 题\n\n> 按错误次数排序，便于优先复习。\n';
+
+      ['single', 'judge', 'blank', 'short', 'prac'].forEach(t => {
+        const list = wrong.filter(q => q.type === t)
+          .sort((a, b) => (Store.peek(b.id).wrong || 0) - (Store.peek(a.id).wrong || 0));
+        if (!list.length) return;
+        md += '\n## ' + groupName[t] + '（' + list.length + ' 题）\n';
+        list.forEach(q => {
+          md += '\n### ' + q.no + '. ' + (q.chapter ? q.chapter + ' · ' : '') +
+            '错 ' + (Store.peek(q.id).wrong || 0) + ' 次\n\n';
+          md += q.stem + '\n\n';
+          if (q.type === 'single') {
+            (q.options || []).forEach(o => { md += '- ' + o.key + '．' + o.text + '\n'; });
+            const t2 = (q.options.find(o => o.key === q.answer) || {}).text || '';
+            md += '\n**答案：' + q.answer + '．' + t2 + '**\n';
+          } else if (q.type === 'judge') {
+            md += '**答案：' + (q.answer === '√' ? '√ 正确' : '× 错误') + '**\n';
+          } else if (q.type === 'blank') {
+            md += '**答案：' + q.answer + '**\n';
+          } else {
+            md += '**参考答案：**\n\n' + (q.answerText || '（无）') + '\n';
+          }
+        });
+      });
+
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '错题本_' + Scheduler.todayStr() + '.md';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+      toast('已导出 ' + wrong.length + ' 道错题');
+    });
+
+    qs('#btnImport').addEventListener('click', () => qs('#fileImport').click());    qs('#fileImport').addEventListener('change', async e => {
       const f = e.target.files && e.target.files[0];
       if (!f) return;
       try {
@@ -818,7 +985,12 @@
     qs('#typeChips').addEventListener('click', e => {
       const b = e.target.closest('.chip');
       if (!b) return;
-      startSession(b.dataset.type, {});
+      const ch = b.dataset.type === 'short' ? App.chapter : '';
+      startSession(b.dataset.type, { chapter: ch });
+    });
+
+    qs('#chapterSelect').addEventListener('change', e => {
+      startSession('short', { chapter: e.target.value });
     });
 
     qs('#btnWrongMode').addEventListener('click', () => {

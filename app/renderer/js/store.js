@@ -11,6 +11,7 @@ const Store = (() => {
       questions: {},
       daily: {},
       typing: {},
+      typingLog: [],
       exams: [],
       meta: { streakLast: '', streakDays: 0, totalAnswered: 0, totalRight: 0, createdAt: new Date().toISOString() },
       settings: { newPerDay: 30, reviewPerDay: 80, requeue: true, typingMode: 'see', skipPunc: true }
@@ -25,6 +26,7 @@ const Store = (() => {
       questions: raw.questions && typeof raw.questions === 'object' ? raw.questions : {},
       daily: raw.daily && typeof raw.daily === 'object' ? raw.daily : {},
       typing: raw.typing && typeof raw.typing === 'object' ? raw.typing : {},
+      typingLog: Array.isArray(raw.typingLog) ? raw.typingLog.slice(-120) : [],
       exams: Array.isArray(raw.exams) ? raw.exams.slice(-50) : [],
       meta: Object.assign(d.meta, raw.meta || {}),
       settings: Object.assign(d.settings, raw.settings || {})

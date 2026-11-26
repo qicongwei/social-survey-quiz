@@ -35,7 +35,7 @@ function createWindow() {
       setTimeout(async () => {
         try {
           const r = await win.webContents.executeJavaScript(
-            "JSON.stringify({questions: window.QUESTION_BANK.questions.length, opts: document.querySelectorAll('#answerArea .opt').length, api: !!window.desktopAPI, typing: !!window.Typing, exam: !!window.Exam, views: document.querySelectorAll('.view').length, version: (window.desktopAPI ? '1.1.0' : '')})"
+            "JSON.stringify({questions: window.QUESTION_BANK.questions.length, opts: document.querySelectorAll('#answerArea .opt').length, api: !!window.desktopAPI, typing: !!window.Typing, exam: !!window.Exam, views: document.querySelectorAll('.view').length, version: '" + app.getVersion() + "'})"
           );
           fs.writeFileSync(path.join(app.getPath('userData'), 'selftest.json'), r, 'utf8');
         } catch (e) {

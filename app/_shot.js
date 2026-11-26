@@ -196,6 +196,55 @@ app.whenReady().then(async () => {
   console.log('FINISH_CHECK:' + JSON.stringify(finishCheck) + ' RESULT:' + JSON.stringify(resultShown));
   await shot('12-typing-result');
 
+  // ---------- 章节筛选 + 逐句背 ----------
+  await win.webContents.executeJavaScript(`
+    (function(){
+      document.querySelector('[data-view="practice"]').click();
+      document.querySelector('#typeChips [data-type="short"]').click();
+      return true;
+    })()
+  `);
+  await sleep(350);
+  const chap = await win.webContents.executeJavaScript(`
+    (function(){
+      const sel = document.querySelector('#chapterSelect');
+      const opts = sel ? sel.options.length : 0;
+      sel.selectedIndex = 1;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return { hidden: sel.hidden, options: opts, value: sel.value,
+               chapter: (window.__SSQ__.App.current || {}).chapter,
+               qno: (window.__SSQ__.App.current || {}).no };
+    })()
+  `);
+  console.log('CHAPTER:' + JSON.stringify(chap));
+  await shot('17-chapter');
+
+  const seg = await win.webContents.executeJavaScript(`
+    (function(){
+      const b = document.querySelector('[data-act="show-answer"]');
+      if (b) b.click();
+      const segBtn = Array.from(document.querySelectorAll('.ab-tools .ghost-btn'))
+        .find(function(x){ return x.textContent === '逐句背'; });
+      const exists = !!segBtn;
+      if (segBtn) segBtn.click();
+      const els = document.querySelectorAll('.seg');
+      const filter = els.length ? getComputedStyle(els[0].querySelector('.seg-txt')).filter : 'none';
+      if (els.length) els[0].click();
+      const barEl = document.querySelector('.seg-bar');
+      const bs = barEl ? getComputedStyle(barEl) : {};
+      const btnEl = barEl ? barEl.querySelector('.ghost-btn') : null;
+      return { btn: exists, segs: els.length, filter: filter,
+               opened: document.querySelectorAll('.seg.open').length,
+               barDisplay: bs.display, barWrap: bs.flexWrap,
+               barW: barEl ? Math.round(barEl.getBoundingClientRect().width) : 0,
+               barH: barEl ? Math.round(barEl.getBoundingClientRect().height) : 0,
+               btnTop: btnEl ? Math.round(btnEl.getBoundingClientRect().top - barEl.getBoundingClientRect().top) : -1 };
+    })()
+  `);
+  console.log('SEG:' + JSON.stringify(seg));
+  await sleep(300);
+  await shot('18-seg');
+
   // ---------- 模拟考试 ----------
   await win.webContents.executeJavaScript(`document.querySelector('[data-view="exam"]').click(); true`);
   await sleep(400);

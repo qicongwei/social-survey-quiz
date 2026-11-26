@@ -10,6 +10,7 @@ const Recite = (() => {
     type: 'all',
     scope: 'all',
     shuffle: false,
+    cover: false,           // true = 先盖住答案自测；false = 答案直接展示（默认）
     order: [],
     pos: 0,
     revealed: false,
@@ -21,6 +22,13 @@ const Recite = (() => {
   const bank = () => (window.__SSQ__ && window.__SSQ__.Bank.all) || [];
   const byId = id => (window.__SSQ__ && window.__SSQ__.Bank.byId[id]) || null;
   const peek = id => Store.peek(id);
+
+  function syncCover() {
+    const cfg = Store.state && Store.state.settings;
+    st.cover = !!(cfg && cfg.reciteCover);
+    const btn = $('reciteCover');
+    if (btn) btn.classList.toggle('on', st.cover);
+  }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -108,13 +116,23 @@ const Recite = (() => {
     const q = cur();
     st.revealed = false;
 
+    // 遮盖模式下答案先藏起来；默认（cover=false）答案与评价按钮直接可见
+    const shown = !st.cover;
+
     const head = card.querySelector('.qhead');
     head.hidden = !q;
     $('rcStem').hidden = !q;
-    $('rcReveal').hidden = !q;
-    $('rcAnswer').hidden = true;
-    $('rcGrade').hidden = true;
+    $('rcReveal').hidden = !q || shown;
+    $('rcAnswer').hidden = !q || !shown;
+    $('rcGrade').hidden = !q || !shown;
     $('rcDone').hidden = !!q;
+
+    const hint = $('rcHint');
+    if (hint) {
+      hint.innerHTML = st.cover
+        ? '<kbd>←</kbd> <kbd>→</kbd> 切换 · <kbd>Space</kbd> 看答案 · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 评价'
+        : '<kbd>←</kbd> <kbd>→</kbd> 切换 · <kbd>Space</kbd> 下一题 · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 评价';
+    }
 
     if (!q) { renderDone(); return; }
 
@@ -191,6 +209,19 @@ const Recite = (() => {
     $('rcReveal').hidden = true;
     $('rcAnswer').hidden = false;
     $('rcGrade').hidden = false;
+  }
+
+  function toggleCover() {
+    st.cover = !st.cover;
+    if (Store.state && Store.state.settings) {
+      Store.state.settings.reciteCover = st.cover;
+      Store.save();
+    }
+    syncCover();
+    render();
+    if (window.__SSQ__ && window.__SSQ__.toast) {
+      window.__SSQ__.toast(st.cover ? '已盖住答案，先自测' : '答案直接显示');
+    }
   }
 
   function step(d) {
@@ -280,6 +311,8 @@ const Recite = (() => {
       }
     });
 
+    $('reciteCover').addEventListener('click', toggleCover);
+
     $('rcShow').addEventListener('click', reveal);
     $('rcPrev').addEventListener('click', () => step(-1));
     $('rcNext').addEventListener('click', () => step(1));
@@ -313,12 +346,12 @@ const Recite = (() => {
       const k = e.key;
       if (k === ' ' || k === 'Spacebar') {
         e.preventDefault();
-        if (!st.revealed) reveal(); else step(1);
+        if (st.cover && !st.revealed) reveal(); else step(1);
         return;
       }
       if (k === 'Enter') {
         e.preventDefault();
-        if (st.revealed) step(1); else reveal();
+        if (st.cover && !st.revealed) reveal(); else step(1);
         return;
       }
       if (k === 'ArrowRight') { e.preventDefault(); step(1); return; }
@@ -327,18 +360,20 @@ const Recite = (() => {
       if (k === 's' || k === 'S') { toggleStar(); return; }
       if (k === '1' || k === '2' || k === '3') {
         e.preventDefault();
-        if (!st.revealed) { reveal(); return; }
+        if (st.cover && !st.revealed) { reveal(); return; }
         grade(k === '1' ? 'fail' : k === '2' ? 'fuzzy' : 'pass');
       }
     });
   }
 
   function init() {
+    syncCover();
     bind();
     build();
   }
 
   function onEnter() {
+    syncCover();
     // 首次进入或数据变化后队列为空时重建
     if (!st.order.length) build();
     else { render(); }

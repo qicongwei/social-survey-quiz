@@ -432,20 +432,24 @@ app.whenReady().then(async () => {
       pos: document.getElementById('rcPos').textContent,
       type: document.getElementById('rcType').textContent,
       stemLen: (document.getElementById('rcStem').textContent||'').length,
+      cover: window.Recite.state.cover,
       revealShown: !document.getElementById('rcReveal').hidden,
       answerHidden: document.getElementById('rcAnswer').hidden,
       gradeHidden: document.getElementById('rcGrade').hidden,
+      answerLen: (document.getElementById('rcAnswer').textContent||'').length,
       queue: window.Recite.state.order.length
     };
   })()`);
   console.log('RECITE:' + JSON.stringify(rc1));
   await shot('26-recite');
 
+  // 换成名解简答，验证长答案也直接展开
+  await win.webContents.executeJavaScript(`document.querySelector('#reciteChips [data-type="short"]').click(); true`);
+  await sleep(350);
   const rc2 = await win.webContents.executeJavaScript(`(function(){
     const st = window.Recite.state;
     const id = st.order[st.pos];
     const s = Store.peek(id) || {};
-    document.getElementById('rcShow').click();
     return {
       id: id,
       answerShown: !document.getElementById('rcAnswer').hidden,
@@ -457,6 +461,20 @@ app.whenReady().then(async () => {
   })()`);
   console.log('RECITE_ANSWER:' + JSON.stringify(rc2));
   await shot('27-recite-answer');
+
+  const rcCover = await win.webContents.executeJavaScript(`(function(){
+    document.getElementById('reciteCover').click();
+    const on = { cover: window.Recite.state.cover,
+                 answerHidden: document.getElementById('rcAnswer').hidden,
+                 revealShown: !document.getElementById('rcReveal').hidden,
+                 btnOn: document.getElementById('reciteCover').classList.contains('on') };
+    document.getElementById('reciteCover').click();
+    on.back = { cover: window.Recite.state.cover,
+                answerHidden: document.getElementById('rcAnswer').hidden,
+                gradeShown: !document.getElementById('rcGrade').hidden };
+    return on;
+  })()`);
+  console.log('RECITE_COVER:' + JSON.stringify(rcCover));
 
   const rc3 = await win.webContents.executeJavaScript(`(function(){
     const today = Scheduler.todayStr();
@@ -474,8 +492,8 @@ app.whenReady().then(async () => {
       recitedAfter: d.recited||0,
       pos: document.getElementById('rcPos').textContent,
       posIndex: st.pos,
-      revealBack: !document.getElementById('rcReveal').hidden,
-      answerResetHidden: document.getElementById('rcAnswer').hidden,
+      revealHidden: document.getElementById('rcReveal').hidden,
+      answerAutoShown: !document.getElementById('rcAnswer').hidden,
       pass: ((s&&s.recite)||{}).pass||0,
       rounds: ((s&&s.recite)||{}).rounds||0,
       repsAfter: (s&&s.reps)||0,
@@ -493,9 +511,9 @@ app.whenReady().then(async () => {
     window.Recite.refresh();
     return st.order.length;
   })()`);
-  await win.webContents.executeJavaScript(`document.getElementById('rcShow').click(); document.querySelector('.rc-g-fail').click(); true`);
+  await win.webContents.executeJavaScript(`document.querySelector('.rc-g-fail').click(); true`);
   await sleep(300);
-  await win.webContents.executeJavaScript(`document.getElementById('rcShow').click(); document.querySelector('.rc-g-pass').click(); true`);
+  await win.webContents.executeJavaScript(`document.querySelector('.rc-g-pass').click(); true`);
   await sleep(400);
   const rcDone = await win.webContents.executeJavaScript(`(function(){
     return {

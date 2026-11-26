@@ -16,7 +16,7 @@ const Store = (() => {
       meta: { streakLast: '', streakDays: 0, totalAnswered: 0, totalRight: 0, createdAt: new Date().toISOString() },
       settings: {
         newPerDay: 30, reviewPerDay: 80, requeue: true, typingMode: 'see', skipPunc: true,
-        theme: 'light', dailyGoal: 50
+        theme: 'light', dailyGoal: 50, reciteCover: false
       }
     };
   }

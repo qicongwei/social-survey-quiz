@@ -128,6 +128,7 @@
           <option value="wrong">只背错题</option>
         </select>
         <button class="ghost-btn" id="reciteShuffle" title="打乱顺序">乱序</button>
+        <button class="ghost-btn" id="reciteCover" title="盖住答案，先自测再核对">遮盖答案</button>
         <span class="rc-note">背题只记遍数，不改动复习排程</span>
       </div>
 
@@ -172,7 +173,7 @@
       </div>
 
       <div class="card-actions">
-        <div class="hint"><kbd>←</kbd> <kbd>→</kbd> 切换 · <kbd>Space</kbd> 看答案 · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 评价</div>
+        <div class="hint" id="rcHint"><kbd>←</kbd> <kbd>→</kbd> 切换 · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 评价</div>
         <div class="row-btns">
           <button class="ghost-btn" id="rcPrev">上一题</button>
           <button class="ghost-btn" id="rcNext">下一题</button>

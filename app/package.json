@@ -1,7 +1,7 @@
 {
   "name": "social-survey-quiz",
   "productName": "社会调查背诵题库",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "description": "《社会调查教程》背诵题库 · 间隔重复记忆",
   "main": "main.js",
   "author": "Q",

@@ -30,6 +30,7 @@
     autoCdTimer: null,    // 按钮上的倒计时刷新计时器
     versionFilled: false, // 设置页版本信息只填一次
     submitStamp: 0,       // 最近一次提交时间，防止同一次 Enter 又触发「下一题」
+    composeStamp: 0,      // 最近一次输入法上屏时间，防止选词用的 Enter 被当成提交
     seen: null,           // 本次会话已出现过的题 id，加练时不重复
     wrongStreak: {}       // 错题强化：当前连续答对次数
   };
@@ -364,6 +365,24 @@
     card.classList.remove('enter');
     void card.offsetWidth;
     card.classList.add('enter');
+
+    focusFirstBlank();
+  }
+
+  /**
+   * 填空题渲染完就把光标放进第一个空：换题后可以直接打字，不必先用鼠标点。
+   * 用下一帧聚焦 —— 此刻卡片还在播 enter 动画，立即 focus 会让页面被滚一下；
+   * preventScroll 再兜一层，长题干时也不会跳动。
+   */
+  function focusFirstBlank() {
+    const inp = qs('#qStem .blank-input');
+    if (!inp) return;
+    requestAnimationFrame(() => {
+      if (!App.current || App.current.type !== 'blank' || App.answered) return;
+      if (document.activeElement === inp) return;
+      inp.focus({ preventScroll: true });
+      inp.setSelectionRange(inp.value.length, inp.value.length);
+    });
   }
 
   function hintFor(type) {
@@ -1240,7 +1259,7 @@
     if (!ver || s.seenVersion === ver) return;
     s.seenVersion = ver;
     Store.save();
-    setTimeout(() => toast('已更新到 v' + ver + '　多空填空不再区分填写顺序'), 800);
+    setTimeout(() => toast('已更新到 v' + ver + '　填空换题后可直接打字，无需点输入框'), 800);
   }
 
   function bindSettings() {
@@ -1544,6 +1563,9 @@
   }
 
   function bindKeys() {
+    // 中文输入法上屏会先发一个 Enter（keyCode 229），记录时间以免被当成「提交」
+    document.addEventListener('compositionend', () => { App.composeStamp = Date.now(); }, true);
+
     document.addEventListener('keydown', e => {
       if (App.view !== 'practice') return;
       const tag = (e.target.tagName || '').toLowerCase();
@@ -1552,6 +1574,9 @@
       if (e.key === 'Escape' && !qs('#noteBox').hidden) { closeNote(); return; }
 
       if (e.key === 'Enter') {
+        // 输入法还在组合（选候选词）时，这个 Enter 属于输入法，不属于答题
+        if (e.isComposing || e.keyCode === 229) return;
+        if (App.composeStamp && Date.now() - App.composeStamp < 120) return;
         // 同一次按键若刚触发过提交，就不要再当成「下一题」，否则反馈区一闪而过
         if (App.submitStamp && Date.now() - App.submitStamp < 300) return;
         if (App.answered) { e.preventDefault(); nextQuestion(); return; }

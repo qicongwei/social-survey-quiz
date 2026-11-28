@@ -360,7 +360,7 @@
     renderStem(q);
     renderAnswerArea(q);
 
-    qs('#hint').innerHTML = hintFor(q.type);
+    qs('#hint').innerHTML = hintFor(q);
 
     card.classList.remove('enter');
     void card.offsetWidth;
@@ -385,10 +385,16 @@
     });
   }
 
-  function hintFor(type) {
+  function hintFor(q) {
+    const type = q && q.type;
     if (type === 'single') return '按 <kbd>1</kbd>–<kbd>4</kbd> 选择 A–D';
     if (type === 'judge') return '按 <kbd>1</kbd> 判正确 · <kbd>2</kbd> 判错误';
-    if (type === 'blank') return '填写后按 <kbd>Enter</kbd> 提交';
+    if (type === 'blank') {
+      const n = (q.blanks && q.blanks.length) || 1;
+      return n > 1
+        ? '按 <kbd>Enter</kbd> 跳到下一个空，' + n + ' 个空都填完再按 <kbd>Enter</kbd> 提交'
+        : '填写后按 <kbd>Enter</kbd> 提交';
+    }
     return '先默想，再按 <kbd>Space</kbd> 看答案';
   }
 
@@ -601,6 +607,38 @@
     else showFeedback(false, '<div class="fb-head">✘ 回答错误</div><div class="fb-ansline">' + ans + '</div>' + wrongTipLine());
     record(q, correct ? 4 : 0, correct);
     markNext(correct);
+  }
+
+  /**
+   * 多空填空时 Enter 逐空推进：还有空没填就先跳到下一个没填的空，全部填满才由调用方提交。
+   * 返回 true 表示这次 Enter 已经被「跳转」消费掉。
+   */
+  function blankEnterNext() {
+    const inputs = qsa('#qStem .blank-input, #answerArea .blank-input');
+    if (inputs.length < 2) return false;                       // 单空题保持原样：Enter 直接提交
+    if (inputs.every(i => i.value.trim())) return false;        // 都填完了，交给 submitBlank
+
+    // 从当前焦点往后找第一个空着的，找到末尾再回绕到前面
+    const cur = inputs.indexOf(document.activeElement);
+    const from = cur >= 0 ? cur + 1 : 0;
+    let target = null;
+    for (let k = 0; k < inputs.length; k++) {
+      const inp = inputs[(from + k) % inputs.length];
+      if (!inp.value.trim()) { target = inp; break; }
+    }
+    if (!target) return false;
+
+    if (target === document.activeElement) {
+      // 只剩当前这个空没填：抖一下提示，不跳也不提交
+      target.classList.remove('need');
+      void target.offsetWidth;
+      target.classList.add('need');
+      setTimeout(() => target.classList.remove('need'), 400);
+      return true;
+    }
+    target.focus({ preventScroll: false });
+    target.setSelectionRange(target.value.length, target.value.length);
+    return true;
   }
 
   function submitBlank() {
@@ -1259,7 +1297,7 @@
     if (!ver || s.seenVersion === ver) return;
     s.seenVersion = ver;
     Store.save();
-    setTimeout(() => toast('已更新到 v' + ver + '　填空换题后可直接打字，无需点输入框'), 800);
+    setTimeout(() => toast('已更新到 v' + ver + '　多空填空按 Enter 逐空推进，填满才提交'), 800);
   }
 
   function bindSettings() {
@@ -1580,7 +1618,14 @@
         // 同一次按键若刚触发过提交，就不要再当成「下一题」，否则反馈区一闪而过
         if (App.submitStamp && Date.now() - App.submitStamp < 300) return;
         if (App.answered) { e.preventDefault(); nextQuestion(); return; }
-        if (inInput || (App.current && App.current.type === 'blank' && !App.answered)) { submitBlank(); return; }
+        if (App.current && App.current.type === 'blank') {
+          e.preventDefault();
+          // 多空：还有空没填就先跳过去；全部填满（或单空题）才提交
+          if (blankEnterNext()) return;
+          submitBlank();
+          return;
+        }
+        if (inInput) { submitBlank(); return; }
         if (App.current && (App.current.type === 'short' || App.current.type === 'prac')) showAnswer();
         return;
       }

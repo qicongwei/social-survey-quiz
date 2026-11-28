@@ -300,6 +300,9 @@ kbd{
 .blank-input:focus{outline:none;border-bottom-color:var(--brand);background:var(--brand-soft)}
 .blank-input.right{border-bottom-color:var(--ok);background:var(--ok-soft);color:var(--ok)}
 .blank-input.wrong{border-bottom-color:var(--bad);background:var(--bad-soft);color:var(--bad)}
+/* 多空填空：只剩这一个空没填时按 Enter，抖一下提示「还差你」 */
+.blank-input.need{border-bottom-color:var(--bad);animation:needshake .36s ease}
+@keyframes needshake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}50%{transform:translateX(4px)}80%{transform:translateX(-2px)}}
 .blank-tip{font-size:12.5px;color:var(--ink3);margin-top:10px}
 .blank-ans{margin-top:12px;font-size:13.5px;color:var(--ink2)}
 .blank-ans b{color:var(--ok)}

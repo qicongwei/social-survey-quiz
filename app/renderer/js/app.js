@@ -27,12 +27,13 @@
     requeue: {},
     goalHit: '',
     autoTimer: null,      // 答对后自动跳题的计时器
+    autoCdTimer: null,    // 按钮上的倒计时刷新计时器
     seen: null,           // 本次会话已出现过的题 id，加练时不重复
     wrongStreak: {}       // 错题强化：当前连续答对次数
   };
 
-  const AUTO_NEXT_DELAY = 800;        // 答对后停顿，留一点时间看结果
-  const AUTO_NEXT_DELAY_BLANK = 1600; // 填空题要读完「你填的 / 正确的」对照，停顿给长一些
+  const AUTO_NEXT_DELAY = 1500;        // 答对后停顿，留时间读完正确答案
+  const AUTO_NEXT_DELAY_BLANK = 2200;  // 填空题要读完「你填的 / 正确的」逐空对照，停顿给长一些
   const WRONG_PASS_NEED = 2;     // 错题强化：连续答对几次才算过
   const REQUEUE_MAX = 3;         // 同一题在本轮最多重现几次，防止无限循环
 
@@ -60,6 +61,27 @@
 
   function clearAuto() {
     if (App.autoTimer) { clearTimeout(App.autoTimer); App.autoTimer = null; }
+    if (App.autoCdTimer) { clearInterval(App.autoCdTimer); App.autoCdTimer = null; }
+    const cd = qs('#btnNext .auto-cd');
+    if (cd) cd.remove();
+  }
+
+  /** 在「下一题」按钮上跑一个可见的倒计时，让用户知道马上会自动翻页 */
+  function startAutoCountdown(btn, ms) {
+    let cd = btn.querySelector('.auto-cd');
+    if (!cd) {
+      cd = document.createElement('i');
+      cd.className = 'auto-cd';
+      btn.appendChild(cd);
+    }
+    let left = ms;
+    const paint = () => { cd.textContent = (Math.max(0, left) / 1000).toFixed(1) + 's'; };
+    paint();
+    App.autoCdTimer = setInterval(() => {
+      left -= 100;
+      paint();
+      if (left <= 0) { clearInterval(App.autoCdTimer); App.autoCdTimer = null; }
+    }, 100);
   }
 
   let toastTimer = null;
@@ -497,7 +519,8 @@
     const ms = delay || (App.current && App.current.type === 'blank' ? AUTO_NEXT_DELAY_BLANK : AUTO_NEXT_DELAY);
     btn.dataset.auto = '1';
     btn.style.setProperty('--auto-delay', ms + 'ms');
-    btn.title = '答对了，' + (ms / 1000) + ' 秒后自动进入下一题（也可立即点击或按 Enter）';
+    btn.title = '答对了，' + (ms / 1000).toFixed(1) + ' 秒后自动进入下一题（也可立即点击或按 Enter）';
+    startAutoCountdown(btn, ms);
     App.autoTimer = setTimeout(() => {
       App.autoTimer = null;
       nextQuestion();
@@ -507,6 +530,11 @@
   function autoTip(tail) {
     if (!autoNextOn()) return tail || '';
     return '稍后自动进入下一题';
+  }
+
+  /** 答对时的统一尾巴：提示马上自动翻页 */
+  function autoTail() {
+    return autoNextOn() ? '　<span style="opacity:.75">稍后自动进入下一题</span>' : '';
   }
 
   function answerSingle(key) {
@@ -522,8 +550,9 @@
       else if (k === key) el.classList.add('wrong');
     });
     const ansText = (q.options.find(o => o.key === q.answer) || {}).text || '';
-    if (correct) showFeedback(true, '答对了　<span style="opacity:.75">' + autoTip('已按间隔重复安排下次复习') + '</span>');
-    else showFeedback(false, '答错了　正确答案是 <b>' + esc(q.answer) + '．' + esc(ansText) + '</b>');
+    const ansLine = '正确答案是 <b>' + esc(q.answer) + '．' + esc(ansText) + '</b>';
+    if (correct) showFeedback(true, '答对了　' + ansLine + autoTail());
+    else showFeedback(false, '答错了　' + ansLine);
     record(q, correct ? 4 : 0, correct);
     markNext(correct);
   }
@@ -539,8 +568,9 @@
       if (v === q.answer) el.classList.add('right');
       if (v === val && !correct) { el.classList.remove('right'); el.classList.add('wrong'); }
     });
-    if (correct) showFeedback(true, '判断正确' + (autoNextOn() ? '　<span style="opacity:.75">' + autoTip('') + '</span>' : ''));
-    else showFeedback(false, '判断错误　正确答案是 <b>' + (q.answer === '√' ? '√ 正确' : '× 错误') + '</b>');
+    const ansLine = '正确答案是 <b>' + (q.answer === '√' ? '√ 正确' : '× 错误') + '</b>';
+    if (correct) showFeedback(true, '判断正确　' + ansLine + autoTail());
+    else showFeedback(false, '判断错误　' + ansLine);
     record(q, correct ? 4 : 0, correct);
     markNext(correct);
   }
@@ -570,21 +600,25 @@
     const sub = qs('#answerArea [data-act="submit-blank"]');
     if (sub) { sub.disabled = true; sub.textContent = '已提交'; }
 
-    const stdLine = q.blanks.map((b, i) => '第' + (i + 1) + '空 ' + b).join('；');
-    const diffHTML = rows.length > 1 || !allOk
-      ? '<div class="fb-diff">' + rows.map(r =>
-          '<div class="fb-row ' + (r.ok ? 'ok' : 'no') + '">' +
-            '<span class="fb-k">第 ' + (r.idx + 1) + ' 空</span>' +
-            '<span class="fb-you">你填<b>' + (r.typed ? esc(r.typed) : '（空）') + '</b></span>' +
-            '<span class="fb-ans">正确<b>' + esc(r.std) + '</b></span>' +
-          '</div>').join('') + '</div>'
-      : '';
+    const rowHTML = r =>
+      '<div class="fb-row ' + (r.ok ? 'ok' : 'no') + '">' +
+        '<span class="fb-k">第 ' + (r.idx + 1) + ' 空</span>' +
+        '<span class="fb-you">你填<b>' + (r.typed ? esc(r.typed) : '（空）') + '</b></span>' +
+        '<span class="fb-ans">正确<b>' + esc(r.std) + '</b></span>' +
+      '</div>';
+    // 单空且填对：只报正确答案，避免「你填 X / 正确 X」重复
+    const diffHTML = (rows.length === 1 && allOk)
+      ? '<div class="fb-diff"><div class="fb-row ok">' +
+          '<span class="fb-k">正确答案</span>' +
+          '<span class="fb-ans"><b>' + esc(rows[0].std) + '</b></span>' +
+        '</div></div>'
+      : '<div class="fb-diff">' + rows.map(rowHTML).join('') + '</div>';
 
     if (allOk) {
       showFeedback(true,
         '<div class="fb-head">填空正确　<span style="opacity:.75">' +
         (anyClose ? '有一处表述略有差异，已计为正确' : '全部填对') + '</span>' +
-        (autoNextOn() ? '　<span style="opacity:.75">' + (AUTO_NEXT_DELAY_BLANK / 1000) + ' 秒后自动进入下一题</span>' : '') +
+        (autoNextOn() ? '　<span style="opacity:.75">' + (AUTO_NEXT_DELAY_BLANK / 1000).toFixed(1) + ' 秒后自动进入下一题</span>' : '') +
         '</div>' + diffHTML);
     } else {
       showFeedback(false,
@@ -1189,7 +1223,7 @@
     qs('#setAutoNext').addEventListener('change', e => {
       Store.state.settings.autoNext = e.target.checked;
       Store.save(true);
-      toast(e.target.checked ? '答对自动下一题：开（停顿 0.8 秒）' : '答对自动下一题：关');
+      toast(e.target.checked ? '答对自动下一题：开（停顿 1.5 秒，填空 2.2 秒）' : '答对自动下一题：关');
     });
 
     qs('#setGoal').addEventListener('change', e => {

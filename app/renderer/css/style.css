@@ -372,6 +372,7 @@ kbd{
   animation:autonext var(--auto-delay,.8s) linear forwards;
 }
 @keyframes autonext{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+#btnNext .auto-cd{font-style:normal;font-size:.82em;opacity:.8;margin-left:.4em;font-variant-numeric:tabular-nums}
 .primary-btn kbd{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3);color:#fff;margin-left:6px}
 .primary-btn:disabled{background:var(--btn-off);box-shadow:none;cursor:not-allowed;transform:none}
 

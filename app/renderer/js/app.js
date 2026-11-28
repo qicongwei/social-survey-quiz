@@ -28,6 +28,7 @@
     goalHit: '',
     autoTimer: null,      // 答对后自动跳题的计时器
     autoCdTimer: null,    // 按钮上的倒计时刷新计时器
+    versionFilled: false, // 设置页版本信息只填一次
     seen: null,           // 本次会话已出现过的题 id，加练时不重复
     wrongStreak: {}       // 错题强化：当前连续答对次数
   };
@@ -119,19 +120,14 @@
     return Array.from(new Set(out.filter(Boolean)));
   }
 
-  /** 返回 true / 'close' / false */
+  /** 判分：规范化后必须完全一致（别名由 expandAlts 展开）；少打多打一个字都算错 */
   function checkBlank(user, standard) {
     const u = normText(user);
     if (!u) return false;
-    const alts = expandAlts(standard);
-    const ns = alts.map(normText).filter(Boolean);
-    if (ns.some(a => a === u)) return true;
-    // 包含判定：答案核心词被写出（如 “抽样误差（随机误差）” vs “抽样误差”）
-    if (ns.some(a => a.length >= 2 && u.length >= 2 && (u.includes(a) || a.includes(u)))) {
-      const near = ns.some(a => Math.abs(a.length - u.length) <= 3);
-      if (near) return 'close';
-    }
-    return false;
+    return expandAlts(standard).some(a => {
+      const n = normText(a);
+      return n && n === u;
+    });
   }
 
   /* ---------------- 队列 ---------------- */
@@ -495,9 +491,14 @@
     const f = qs('#feedback');
     f.className = 'feedback ' + (ok ? 'ok' : 'no');
     f.innerHTML = html;
-    // 带逐空对照时改为纵向排列（.feedback 默认是 flex 横排）
-    f.classList.toggle('col', !!f.querySelector('.fb-diff'));
+    // 反馈是多行（判定 / 正确答案 / 逐空对照 / 提示），一律纵向排列
+    f.classList.add('col');
     f.hidden = false;
+    // 窗口矮的时候反馈会落到可视区外，用户就「看不到正确答案」，这里拉回视野
+    const r = f.getBoundingClientRect();
+    if (r.bottom > window.innerHeight - 8 || r.top < 0) {
+      f.scrollIntoView({ block: 'nearest' });
+    }
   }
 
   /**
@@ -532,9 +533,16 @@
     return '稍后自动进入下一题';
   }
 
-  /** 答对时的统一尾巴：提示马上自动翻页 */
-  function autoTail() {
-    return autoNextOn() ? '　<span style="opacity:.75">稍后自动进入下一题</span>' : '';
+  /** 答对时提示「N 秒后自动进入下一题」，是反馈条里独立的一行 */
+  function autoTipLine(ms) {
+    const sec = ((ms || AUTO_NEXT_DELAY) / 1000).toFixed(1);
+    if (!autoNextOn()) return '<div class="fb-tip">按 Enter 或点「下一题」继续</div>';
+    return '<div class="fb-tip">' + sec + ' 秒后自动进入下一题</div>';
+  }
+
+  /** 答错时不自动跳，明确告诉用户要手动翻 */
+  function wrongTipLine() {
+    return '<div class="fb-tip">答错不自动跳，看完正确答案后点「下一题」继续</div>';
   }
 
   function answerSingle(key) {
@@ -550,9 +558,9 @@
       else if (k === key) el.classList.add('wrong');
     });
     const ansText = (q.options.find(o => o.key === q.answer) || {}).text || '';
-    const ansLine = '正确答案是 <b>' + esc(q.answer) + '．' + esc(ansText) + '</b>';
-    if (correct) showFeedback(true, '答对了　' + ansLine + autoTail());
-    else showFeedback(false, '答错了　' + ansLine);
+    const ans = '正确答案　<b>' + esc(q.answer) + '．' + esc(ansText) + '</b>';
+    if (correct) showFeedback(true, '<div class="fb-head">✔ 回答正确</div><div class="fb-ansline">' + ans + '</div>' + autoTipLine());
+    else showFeedback(false, '<div class="fb-head">✘ 回答错误</div><div class="fb-ansline">' + ans + '</div>' + wrongTipLine());
     record(q, correct ? 4 : 0, correct);
     markNext(correct);
   }
@@ -568,9 +576,9 @@
       if (v === q.answer) el.classList.add('right');
       if (v === val && !correct) { el.classList.remove('right'); el.classList.add('wrong'); }
     });
-    const ansLine = '正确答案是 <b>' + (q.answer === '√' ? '√ 正确' : '× 错误') + '</b>';
-    if (correct) showFeedback(true, '判断正确　' + ansLine + autoTail());
-    else showFeedback(false, '判断错误　' + ansLine);
+    const ans = '正确答案　<b>' + (q.answer === '√' ? '√ 正确' : '× 错误') + '</b>';
+    if (correct) showFeedback(true, '<div class="fb-head">✔ 回答正确</div><div class="fb-ansline">' + ans + '</div>' + autoTipLine());
+    else showFeedback(false, '<div class="fb-head">✘ 回答错误</div><div class="fb-ansline">' + ans + '</div>' + wrongTipLine());
     record(q, correct ? 4 : 0, correct);
     markNext(correct);
   }
@@ -583,16 +591,14 @@
 
     const rows = [];
     let okCount = 0;
-    let anyClose = false;
     inputs.forEach((inp, i) => {
       const std = q.blanks[i] != null ? q.blanks[i] : q.answer;
-      const res = checkBlank(inp.value, std);
+      const ok = checkBlank(inp.value, std);
       inp.classList.remove('right', 'wrong');
-      if (res === true) { inp.classList.add('right'); okCount++; }
-      else if (res === 'close') { inp.classList.add('right'); anyClose = true; okCount++; }
-      else { inp.classList.add('wrong'); }
+      inp.classList.add(ok ? 'right' : 'wrong');
+      if (ok) okCount++;
       inp.disabled = true;
-      rows.push({ idx: i, typed: inp.value.trim(), std: std, ok: !!res });
+      rows.push({ idx: i, typed: inp.value.trim(), std: std, ok: ok });
     });
 
     App.answered = true;
@@ -606,25 +612,19 @@
         '<span class="fb-you">你填<b>' + (r.typed ? esc(r.typed) : '（空）') + '</b></span>' +
         '<span class="fb-ans">正确<b>' + esc(r.std) + '</b></span>' +
       '</div>';
-    // 单空且填对：只报正确答案，避免「你填 X / 正确 X」重复
-    const diffHTML = (rows.length === 1 && allOk)
-      ? '<div class="fb-diff"><div class="fb-row ok">' +
-          '<span class="fb-k">正确答案</span>' +
-          '<span class="fb-ans"><b>' + esc(rows[0].std) + '</b></span>' +
-        '</div></div>'
-      : '<div class="fb-diff">' + rows.map(rowHTML).join('') + '</div>';
 
-    if (allOk) {
-      showFeedback(true,
-        '<div class="fb-head">填空正确　<span style="opacity:.75">' +
-        (anyClose ? '有一处表述略有差异，已计为正确' : '全部填对') + '</span>' +
-        (autoNextOn() ? '　<span style="opacity:.75">' + (AUTO_NEXT_DELAY_BLANK / 1000).toFixed(1) + ' 秒后自动进入下一题</span>' : '') +
-        '</div>' + diffHTML);
-    } else {
-      showFeedback(false,
-        '<div class="fb-head">填空错误　<span style="opacity:.75">' +
-        rows.length + ' 空对了 ' + okCount + ' 空，看完正确答案后点「下一题」继续</span></div>' + diffHTML);
-    }
+    // 1) 判定行：一眼看出对错；2) 正确答案行：不论对错都给出；3) 多空或答错时再列逐空对照
+    const answerLine = '<div class="fb-ansline">正确答案　<b>' +
+      esc(rows.map(r => r.std).join('；')) + '</b></div>';
+    const diffHTML = (rows.length > 1 || !allOk)
+      ? '<div class="fb-diff">' + rows.map(rowHTML).join('') + '</div>'
+      : '';
+    const tip = allOk ? autoTipLine(AUTO_NEXT_DELAY_BLANK) : wrongTipLine();
+
+    showFeedback(allOk,
+      '<div class="fb-head">' + (allOk ? '✔ 回答正确' : '✘ 回答错误') +
+        (allOk ? '' : '　<span style="opacity:.8">' + rows.length + ' 空对了 ' + okCount + ' 空</span>') +
+      '</div>' + answerLine + diffHTML + tip);
     record(q, allOk ? 4 : 0, allOk);
     markNext(allOk);
   }
@@ -1202,6 +1202,22 @@
     qs('#setAutoNext').checked = s.autoNext !== false;
     qs('#setGoal').value = s.dailyGoal || 50;
     applyTheme(s.theme || 'light', false);
+    fillVersion();
+  }
+
+  /** 设置页显示版本与数据目录：换包后能一眼确认自己开的是哪一版 */
+  function fillVersion() {
+    if (App.versionFilled) return;
+    App.versionFilled = true;
+    const set = (v, d) => {
+      const a = qs('#appVersion'); if (a) a.textContent = v;
+      const b = qs('#appDataDir'); if (b) b.textContent = d;
+    };
+    if (window.desktopAPI && window.desktopAPI.info) {
+      window.desktopAPI.info().then(i => set('v' + i.version, i.userData)).catch(() => set('开发模式', '—'));
+    } else {
+      set('开发模式', '—');
+    }
   }
 
   function bindSettings() {

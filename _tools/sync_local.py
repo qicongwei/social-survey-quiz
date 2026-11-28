@@ -13,6 +13,7 @@
 import argparse
 import filecmp
 import os
+import re
 import shutil
 import sys
 
@@ -27,9 +28,11 @@ def asar_version(root):
     if not os.path.exists(p):
         return None
     raw = open(p, "rb").read()
-    for v in (b"1.9.0", b"1.8.0", b"1.7.0", b"1.6.0", b"1.5.0"):
-        if v in raw:
-            return v.decode()
+    # 直接在 asar 里找 package.json 的 "version": "x.y.z"，不维护版本白名单
+    # package-lock.json 里也有 version 1.0.0，所以锚定 productName 之后那一个
+    m = re.search(rb'"productName"\s*:\s*"[^"]*"\s*,\s*"version"\s*:\s*"(\d+\.\d+\.\d+)"', raw)
+    if m:
+        return m.group(1).decode()
     return "unknown"
 
 

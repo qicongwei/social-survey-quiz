@@ -31,7 +31,8 @@
     wrongStreak: {}       // 错题强化：当前连续答对次数
   };
 
-  const AUTO_NEXT_DELAY = 800;   // 答对后停顿，留一点时间看结果
+  const AUTO_NEXT_DELAY = 800;        // 答对后停顿，留一点时间看结果
+  const AUTO_NEXT_DELAY_BLANK = 1600; // 填空题要读完「你填的 / 正确的」对照，停顿给长一些
   const WRONG_PASS_NEED = 2;     // 错题强化：连续答对几次才算过
   const REQUEUE_MAX = 3;         // 同一题在本轮最多重现几次，防止无限循环
 
@@ -472,27 +473,35 @@
     const f = qs('#feedback');
     f.className = 'feedback ' + (ok ? 'ok' : 'no');
     f.innerHTML = html;
+    // 带逐空对照时改为纵向排列（.feedback 默认是 flex 横排）
+    f.classList.toggle('col', !!f.querySelector('.fb-diff'));
     f.hidden = false;
   }
 
-  /** 答对自动跳下一题（留 AUTO_NEXT_DELAY 的停顿）；答错只亮出按钮，等用户自己翻 */
-  function markNext(correct) {
+  /**
+   * 答对自动跳下一题（留一点停顿）；答错只亮出按钮，等用户自己翻。
+   * @param {boolean} correct 是否答对
+   * @param {number} [delay] 停顿毫秒数，默认按题型取
+   */
+  function markNext(correct, delay) {
     const btn = qs('#btnNext');
     btn.hidden = false;
     qs('#hint').hidden = true;
     clearAuto();
     const auto = !!correct && autoNextOn();
-    if (auto) btn.dataset.auto = '1';
-    else btn.removeAttribute('data-auto');
-    if (auto) {
-      btn.title = '答对了，' + (AUTO_NEXT_DELAY / 1000) + ' 秒后自动进入下一题（也可立即点击）';
-      App.autoTimer = setTimeout(() => {
-        App.autoTimer = null;
-        nextQuestion();
-      }, AUTO_NEXT_DELAY);
-    } else {
+    if (!auto) {
+      btn.removeAttribute('data-auto');
       btn.title = '';
+      return;
     }
+    const ms = delay || (App.current && App.current.type === 'blank' ? AUTO_NEXT_DELAY_BLANK : AUTO_NEXT_DELAY);
+    btn.dataset.auto = '1';
+    btn.style.setProperty('--auto-delay', ms + 'ms');
+    btn.title = '答对了，' + (ms / 1000) + ' 秒后自动进入下一题（也可立即点击或按 Enter）';
+    App.autoTimer = setTimeout(() => {
+      App.autoTimer = null;
+      nextQuestion();
+    }, ms);
   }
 
   function autoTip(tail) {
@@ -539,31 +548,48 @@
   function submitBlank() {
     if (App.answered) return;
     const q = App.current;
-    const inputs = qsa('#answerArea .blank-input, #qStem .blank-input');
+    const inputs = qsa('#qStem .blank-input, #answerArea .blank-input');
     if (!inputs.length) return;
 
-    let allOk = true;
+    const rows = [];
+    let okCount = 0;
     let anyClose = false;
     inputs.forEach((inp, i) => {
       const std = q.blanks[i] != null ? q.blanks[i] : q.answer;
       const res = checkBlank(inp.value, std);
       inp.classList.remove('right', 'wrong');
-      if (res === true) inp.classList.add('right');
-      else if (res === 'close') { inp.classList.add('right'); anyClose = true; }
-      else { inp.classList.add('wrong'); allOk = false; }
+      if (res === true) { inp.classList.add('right'); okCount++; }
+      else if (res === 'close') { inp.classList.add('right'); anyClose = true; okCount++; }
+      else { inp.classList.add('wrong'); }
       inp.disabled = true;
+      rows.push({ idx: i, typed: inp.value.trim(), std: std, ok: !!res });
     });
 
     App.answered = true;
+    const allOk = okCount === rows.length;
     const sub = qs('#answerArea [data-act="submit-blank"]');
     if (sub) { sub.disabled = true; sub.textContent = '已提交'; }
-    const std = q.blanks.map((b, i) => '第' + (i + 1) + '空 ' + b).join('；');
+
+    const stdLine = q.blanks.map((b, i) => '第' + (i + 1) + '空 ' + b).join('；');
+    const diffHTML = rows.length > 1 || !allOk
+      ? '<div class="fb-diff">' + rows.map(r =>
+          '<div class="fb-row ' + (r.ok ? 'ok' : 'no') + '">' +
+            '<span class="fb-k">第 ' + (r.idx + 1) + ' 空</span>' +
+            '<span class="fb-you">你填<b>' + (r.typed ? esc(r.typed) : '（空）') + '</b></span>' +
+            '<span class="fb-ans">正确<b>' + esc(r.std) + '</b></span>' +
+          '</div>').join('') + '</div>'
+      : '';
+
     if (allOk) {
-      showFeedback(true, '全部填对' + (anyClose ? '（有一处表述略有差异，已计为正确）' : '') +
-        (autoNextOn() ? '　<span style="opacity:.75">稍后自动进入下一题</span>' : '') +
-        (q.blanks.length > 1 ? '　参考答案：<b>' + esc(std) + '</b>' : ''));
+      showFeedback(true,
+        '<div class="fb-head">填空正确　<span style="opacity:.75">' +
+        (anyClose ? '有一处表述略有差异，已计为正确' : '全部填对') + '</span>' +
+        (autoNextOn() ? '　<span style="opacity:.75">' + (AUTO_NEXT_DELAY_BLANK / 1000) + ' 秒后自动进入下一题</span>' : '') +
+        '</div>' + diffHTML);
     } else {
-      showFeedback(false, '参考答案：<b>' + esc(std) + '</b>');
+      showFeedback(false,
+        '<div class="fb-head">填空错误　<span style="opacity:.75">' +
+        rows.length + ' 空对了 ' + okCount + ' 空，看完正确答案后点「下一题」继续</span></div>' + diffHTML);
     }
     record(q, allOk ? 4 : 0, allOk);
     markNext(allOk);

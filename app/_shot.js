@@ -677,6 +677,60 @@ app.whenReady().then(async () => {
   console.log('MANUAL_NEXT:' + JSON.stringify({ before: manual1, after: manual2,
     stayed: manual1.id === manual2.cur }));
 
+  // 填空：答错必须给「你填 / 正确答案」对照且不自动跳；答对自动跳（停顿 1.6s）
+  const blkWrong = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__;
+    A.startSession('blank', {});
+    const App = A.App;
+    const ins = Array.from(document.querySelectorAll('#qStem .blank-input'));
+    ins.forEach(function(i){ i.value = '错误答案XYZ'; i.dispatchEvent(new Event('input',{bubbles:true})); });
+    document.querySelector('[data-act="submit-blank"]').click();
+    const fb = document.getElementById('feedback');
+    const btn = document.getElementById('btnNext');
+    return {
+      id: App.current.id,
+      isErr: /填空错误/.test(fb.textContent),
+      rows: fb.querySelectorAll('.fb-row').length,
+      hasCorrect: /正确/.test(fb.textContent),
+      wrongInputs: document.querySelectorAll('#qStem .blank-input.wrong').length,
+      autoAttr: btn.hasAttribute('data-auto'),
+      fbBlock: fb.classList.contains('col')
+    };
+  })()`);
+  await shot('42-blank-wrong');
+  await sleep(2000);
+  const blkWrongAfter = await win.webContents.executeJavaScript(`(function(){
+    const App = window.__SSQ__.App; return { cur: App.current.id, pos: App.session.pos };
+  })()`);
+  console.log('BLANK_WRONG:' + JSON.stringify({ before: blkWrong, after: blkWrongAfter,
+    stayed: blkWrong.id === blkWrongAfter.cur }));
+
+  const blkRight = await win.webContents.executeJavaScript(`(function(){
+    const A = window.__SSQ__;
+    document.getElementById('btnNext').click();
+    const App = A.App;
+    const q = App.current;
+    const ins = Array.from(document.querySelectorAll('#qStem .blank-input'));
+    ins.forEach(function(i,k){ i.value = q.blanks[k] || ''; i.dispatchEvent(new Event('input',{bubbles:true})); });
+    document.querySelector('[data-act="submit-blank"]').click();
+    const fb = document.getElementById('feedback');
+    const btn = document.getElementById('btnNext');
+    return {
+      id: q.id,
+      isOk: /填空正确/.test(fb.textContent),
+      autoAttr: btn.hasAttribute('data-auto'),
+      delay: getComputedStyle(btn).getPropertyValue('--auto-delay').trim(),
+      rightInputs: document.querySelectorAll('#qStem .blank-input.right').length
+    };
+  })()`);
+  await shot('43-blank-right');
+  await sleep(2100);
+  const blkRightAfter = await win.webContents.executeJavaScript(`(function(){
+    const App = window.__SSQ__.App; return { cur: App.current.id, pos: App.session.pos };
+  })()`);
+  console.log('BLANK_RIGHT:' + JSON.stringify({ before: blkRight, after: blkRightAfter,
+    advanced: blkRight.id !== blkRightAfter.cur }));
+
   const extraChk = await win.webContents.executeJavaScript(`(function(){
     const A = window.__SSQ__;
     A.startSession('single', {});

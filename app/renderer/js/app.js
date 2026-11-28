@@ -591,42 +591,50 @@
     const inputs = qsa('#qStem .blank-input, #answerArea .blank-input');
     if (!inputs.length) return;
 
-    const rows = [];
-    let okCount = 0;
-    inputs.forEach((inp, i) => {
-      const std = q.blanks[i] != null ? q.blanks[i] : q.answer;
-      const ok = checkBlank(inp.value, std);
-      inp.classList.remove('right', 'wrong');
-      inp.classList.add(ok ? 'right' : 'wrong');
-      if (ok) okCount++;
-      inp.disabled = true;
-      rows.push({ idx: i, typed: inp.value.trim(), std: std, ok: ok });
+    const stds = (q.blanks && q.blanks.length) ? q.blanks.slice() : [q.answer];
+    const orderFree = stds.length > 1;   // 多个空：只比内容集合，不认填写顺序
+
+    // 每个标准答案只能用一次：用户把「B」填在第 1 空、把「A」填在第 2 空，仍算全对
+    const pool = stds.map(s => ({ std: s, used: false }));
+    const rows = inputs.map((inp, i) => {
+      const typed = inp.value.trim();
+      let hit = -1;
+      if (typed) hit = pool.findIndex(p => !p.used && checkBlank(typed, p.std));
+      if (hit >= 0) pool[hit].used = true;
+      return { idx: i, typed: typed, ok: hit >= 0, matched: hit >= 0 ? pool[hit].std : '' };
     });
 
     App.answered = true;
+    const okCount = rows.filter(r => r.ok).length;
     const allOk = okCount === rows.length;
+    inputs.forEach((inp, i) => {
+      inp.classList.remove('right', 'wrong');
+      inp.classList.add(rows[i].ok ? 'right' : 'wrong');
+      inp.disabled = true;
+    });
     const sub = qs('#answerArea [data-act="submit-blank"]');
     if (sub) { sub.disabled = true; sub.textContent = '已提交'; }
 
-    const rowHTML = r =>
-      '<div class="fb-row ' + (r.ok ? 'ok' : 'no') + '">' +
-        '<span class="fb-k">第 ' + (r.idx + 1) + ' 空</span>' +
-        '<span class="fb-you">你填<b>' + (r.typed ? esc(r.typed) : '（空）') + '</b></span>' +
-        '<span class="fb-ans">正确<b>' + esc(r.std) + '</b></span>' +
-      '</div>';
-
-    // 1) 判定行：一眼看出对错；2) 正确答案行：不论对错都给出；3) 多空或答错时再列逐空对照
-    const answerLine = '<div class="fb-ansline">正确答案　<b>' +
-      esc(rows.map(r => r.std).join('；')) + '</b></div>';
-    const diffHTML = (rows.length > 1 || !allOk)
-      ? '<div class="fb-diff">' + rows.map(rowHTML).join('') + '</div>'
+    // 三件事必须说清：对错、正确答案、接下来会怎样
+    const answerLine = '<div class="fb-ansline">正确答案　<b>' + esc(stds.join('；')) + '</b></div>';
+    const youLine = allOk ? '' :
+      '<div class="fb-ansline">你填的　' + esc(rows.map(r => r.typed || '（空）').join('；')) + '</div>';
+    const missLine = (orderFree && !allOk)
+      ? (() => {
+          const miss = pool.filter(p => !p.used).map(p => p.std);
+          return miss.length
+            ? '<div class="fb-ansline">没填出的　' + esc(miss.join('；')) + '</div>'
+            : '';
+        })()
       : '';
     const tip = allOk ? autoTipLine(AUTO_NEXT_DELAY_BLANK) : wrongTipLine();
+    const head = '<div class="fb-head">' + (allOk ? '✔ 回答正确' : '✘ 回答错误') +
+      (allOk
+        ? (orderFree ? '　<span style="opacity:.8">' + stds.length + ' 个空全部填对，顺序不限</span>' : '')
+        : '　<span style="opacity:.8">' + rows.length + ' 空对了 ' + okCount + ' 空</span>') +
+      '</div>';
 
-    showFeedback(allOk,
-      '<div class="fb-head">' + (allOk ? '✔ 回答正确' : '✘ 回答错误') +
-        (allOk ? '' : '　<span style="opacity:.8">' + rows.length + ' 空对了 ' + okCount + ' 空</span>') +
-      '</div>' + answerLine + diffHTML + tip);
+    showFeedback(allOk, head + answerLine + youLine + missLine + tip);
     record(q, allOk ? 4 : 0, allOk);
     markNext(allOk);
   }
@@ -1232,7 +1240,7 @@
     if (!ver || s.seenVersion === ver) return;
     s.seenVersion = ver;
     Store.save();
-    setTimeout(() => toast('已更新到 v' + ver + '　填空严格判分，答对也显示正确答案'), 800);
+    setTimeout(() => toast('已更新到 v' + ver + '　多空填空不再区分填写顺序'), 800);
   }
 
   function bindSettings() {

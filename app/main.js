@@ -13,7 +13,7 @@ function createWindow() {
     minWidth: 880,
     minHeight: 640,
     backgroundColor: '#f4f6f9',
-    title: '社会调查 · 背诵题库',
+    title: '社会调查 · 背诵题库  v' + require('./package.json').version,
     autoHideMenuBar: true,
     show: !SELFTEST,
     icon: path.join(__dirname, 'assets', 'icon.ico'),

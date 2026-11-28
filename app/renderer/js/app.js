@@ -29,6 +29,7 @@
     autoTimer: null,      // 答对后自动跳题的计时器
     autoCdTimer: null,    // 按钮上的倒计时刷新计时器
     versionFilled: false, // 设置页版本信息只填一次
+    submitStamp: 0,       // 最近一次提交时间，防止同一次 Enter 又触发「下一题」
     seen: null,           // 本次会话已出现过的题 id，加练时不重复
     wrongStreak: {}       // 错题强化：当前连续答对次数
   };
@@ -585,6 +586,7 @@
 
   function submitBlank() {
     if (App.answered) return;
+    App.submitStamp = Date.now();   // 这一次 Enter 已经用来提交，别再被当成「下一题」
     const q = App.current;
     const inputs = qsa('#qStem .blank-input, #answerArea .blank-input');
     if (!inputs.length) return;
@@ -1212,12 +1214,25 @@
     const set = (v, d) => {
       const a = qs('#appVersion'); if (a) a.textContent = v;
       const b = qs('#appDataDir'); if (b) b.textContent = d;
+      const c = qs('#brandVer'); if (c) c.textContent = v;
     };
     if (window.desktopAPI && window.desktopAPI.info) {
-      window.desktopAPI.info().then(i => set('v' + i.version, i.userData)).catch(() => set('开发模式', '—'));
+      window.desktopAPI.info().then(i => {
+        set('v' + i.version, i.userData);
+        notifyUpdate(i.version);
+      }).catch(() => set('开发模式', '—'));
     } else {
       set('开发模式', '—');
     }
+  }
+
+  /** 换到新版本后第一次打开时提示一次，之后不再打扰 */
+  function notifyUpdate(ver) {
+    const s = Store.state.settings;
+    if (!ver || s.seenVersion === ver) return;
+    s.seenVersion = ver;
+    Store.save();
+    setTimeout(() => toast('已更新到 v' + ver + '　填空严格判分，答对也显示正确答案'), 800);
   }
 
   function bindSettings() {
@@ -1481,13 +1496,9 @@
       else if (act === 'self-grade') selfGrade(b.dataset.g);
     });
 
-    // 填空题回车提交
-    qs('#qStem').addEventListener('keydown', e => {
-      if (e.key === 'Enter' && App.current && App.current.type === 'blank' && !App.answered) {
-        e.preventDefault();
-        submitBlank();
-      }
-    });
+    // 填空题的回车提交统一在 bindKeys 里处理，这里不再单独监听：
+    // 两处都监听会让同一次 Enter 先提交、再冒泡到 document 被判成「已作答 → 下一题」，
+    // 反馈区刚出现就被翻页，用户看不到对错和正确答案。
   }
 
   function bindBrowse() {
@@ -1533,6 +1544,8 @@
       if (e.key === 'Escape' && !qs('#noteBox').hidden) { closeNote(); return; }
 
       if (e.key === 'Enter') {
+        // 同一次按键若刚触发过提交，就不要再当成「下一题」，否则反馈区一闪而过
+        if (App.submitStamp && Date.now() - App.submitStamp < 300) return;
         if (App.answered) { e.preventDefault(); nextQuestion(); return; }
         if (inInput || (App.current && App.current.type === 'blank' && !App.answered)) { submitBlank(); return; }
         if (App.current && (App.current.type === 'short' || App.current.type === 'prac')) showAnswer();

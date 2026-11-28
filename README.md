@@ -124,6 +124,12 @@ node_modules\.bin\electron-packager . 社会调查背诵题库 ^
 
 打包产物约 269 MB，须整目录分发（exe 依赖同目录 dll 与 resources）。
 
+**本机常驻副本要同步**：如果桌面快捷方式指向的是拷出去的目录（默认 `D:\50_Utils\社会调查背诵题库-win32-x64`），重新打包后必须同步一次，否则打开的还是上一版：
+
+```bash
+python _tools\sync_local.py        # 已在最新会自行跳过；带 --check 只检查
+```
+
 发布用 zip：
 
 ```bash
